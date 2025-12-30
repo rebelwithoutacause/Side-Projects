@@ -1,6 +1,21 @@
+<div align="center">
+
 # ★ THE RETRO DINER ★
 
-A vintage-styled recipe website featuring classic American diner favorites from burgers and pizzas to delicious cakes. Built with a nostalgic 1950s aesthetic and interactive recipe browsing.
+### 🍔 Authentic Recipes Since 1955 🍕
+
+<img src="HomePage/home-page.png" alt="The Retro Diner" width="600"/>
+
+[![Live Demo](https://img.shields.io/badge/Demo-Live-success?style=for-the-badge)](https://rebelwithoutacause.github.io/Side-Projects/THE-RETRO-DINER/)
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
+[![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/CSS)
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+
+**A vintage-styled recipe website featuring classic American diner favorites from burgers and pizzas to delicious cakes. Built with a nostalgic 1950s aesthetic and interactive recipe browsing.**
+
+---
+
+</div>
 
 ## 👤 Author
 
