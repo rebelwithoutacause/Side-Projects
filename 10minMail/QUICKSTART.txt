@@ -1,0 +1,68 @@
+======================================================================
+                     10 MINUTE MAIL - QUICK START
+======================================================================
+
+STEP 1: Start the Server
+-------------------------
+Option A - Using the Batch File (Easiest):
+   * Double-click "START_SERVER.bat"
+
+Option B - Using Command Prompt:
+   * Open Command Prompt in this folder
+   * Type: python server.py
+   * Press Enter
+
+Option C - Using PowerShell:
+   * Open PowerShell in this folder
+   * Type: python server.py
+   * Press Enter
+
+
+STEP 2: Open Your Browser
+--------------------------
+* Open your web browser (Chrome, Firefox, Edge, etc.)
+* Go to: http://localhost:8000
+
+
+STEP 3: Use Your Temporary Email
+---------------------------------
+* A random email address will be generated automatically
+* Click "Copy" to copy the email address
+* Use it for registrations, verifications, etc.
+* Emails will appear in the inbox automatically
+
+
+FEATURES:
+=========
+* Choose duration: 10, 15, or 30 minutes
+* Auto-refresh inbox every 5 seconds
+* Click any email to read full content
+* Generate new email anytime with "New Email" button
+* Copy email address with one click
+
+
+TROUBLESHOOTING:
+===============
+If you see errors:
+1. Make sure you started the server (Step 1)
+2. Make sure you're using http://localhost:8000 (not opening the HTML file directly)
+3. Check that Python is installed (run: python --version)
+4. Read TROUBLESHOOTING.md for more help
+
+
+TO STOP THE SERVER:
+==================
+* Press Ctrl+C in the Command Prompt/PowerShell window
+* Or simply close the window
+
+
+NEED HELP?
+==========
+* See README.md for full documentation
+* See TROUBLESHOOTING.md for common issues
+* Check browser console (F12) for error messages
+
+
+======================================================================
+                    Enjoy your temporary email!
+======================================================================
