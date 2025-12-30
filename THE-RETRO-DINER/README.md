@@ -4,7 +4,7 @@ A vintage-styled recipe website featuring classic American diner favorites from 
 
 ## 👤 Author
 
-**Created by [@rebelwithoutacause](https://github.com/rebelwithoutacause)**
+**Created by [@rebelwithoutacause](https://github.com/rebelwithoutacause) + Claude Code assistant**
 
 This entire application - from concept to code to design - was created by me as a personal side project.
 
