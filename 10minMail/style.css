@@ -346,36 +346,12 @@ header h1 {
     letter-spacing: 1px;
 }
 
-.duration-buttons {
-    display: flex;
-    gap: 8px;
-}
-
-.duration-btn {
-    padding: 10px 20px;
-    border: 2px solid var(--primary-color);
-    background-color: transparent;
-    border-radius: 0;
+.duration-text {
+    color: var(--primary-color);
     font-size: 0.9rem;
     font-weight: 700;
-    cursor: pointer;
-    transition: all 0.3s;
-    color: var(--primary-color);
     font-family: 'Courier New', Courier, monospace;
     text-transform: uppercase;
-}
-
-.duration-btn:hover {
-    background-color: var(--primary-color);
-    color: #000;
-    box-shadow: var(--glow);
-}
-
-.duration-btn.active {
-    background-color: var(--primary-color);
-    color: #000;
-    border-color: var(--primary-color);
-    box-shadow: var(--glow);
 }
 
 /* Inbox Section */
