@@ -159,7 +159,7 @@ This project is free to use and modify for personal or commercial purposes.
 
 ## Credits
 
-**Project Creator**: [@rebelwithoutacause](https://github.com/rebelwithoutacause)
+**Project Creator**: [rebelwithoutacause](https://github.com/rebelwithoutacause)
 
 **Implementation**: Built with retro computing aesthetics in mind. Inspired by classic terminal interfaces and QA engineering culture.
 
