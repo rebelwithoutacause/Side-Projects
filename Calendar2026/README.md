@@ -159,7 +159,9 @@ This project is free to use and modify for personal or commercial purposes.
 
 ## Credits
 
-Created with retro computing aesthetics in mind. Inspired by classic terminal interfaces and QA engineering culture.
+**Project Creator**: The idea for this project is mine.
+
+**Implementation**: Built with retro computing aesthetics in mind. Inspired by classic terminal interfaces and QA engineering culture.
 
 ---
 
