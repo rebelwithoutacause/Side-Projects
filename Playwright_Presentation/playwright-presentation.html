@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playwright: Modern Web Testing</title>
+    <style>
+        :root {
+            --primary: #6d28d9;
+            --primary-light: #8b5cf6;
+            --primary-dark: #4c1d95;
+            --accent: #10b981;
+            --amber: #d97706;
+            --code-bg: #1e1e2e;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+            background: #0a0a18;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 15% 50%, rgba(109,40,217,0.35) 0%, transparent 55%),
+                radial-gradient(ellipse at 85% 20%, rgba(139,92,246,0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 90%, rgba(16,185,129,0.12) 0%, transparent 50%);
+            animation: bgPulse 9s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+
+        @keyframes bgPulse {
+            0%   { opacity: 0.65; }
+            100% { opacity: 1; }
+        }
+
+        /* ── Slide Container ─────────────────────────────── */
+        .slide-container {
+            position: relative;
+            width: min(1100px, calc((100vh - 40px) * 16/9));
+            max-width: 100%;
+            aspect-ratio: 16/9;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow:
+                0 0 0 1px rgba(139,92,246,0.25),
+                0 24px 70px rgba(0,0,0,0.55),
+                0 0 100px rgba(109,40,217,0.18);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Progress Bar ────────────────────────────────── */
+        .progress-bar {
+            height: 4px;
+            background: rgba(109,40,217,0.12);
+            flex-shrink: 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6d28d9, #8b5cf6, #a78bfa);
+            transition: width 0.45s cubic-bezier(0.4,0,0.2,1);
+            position: relative;
+        }
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            right: -3px; top: 50%;
+            transform: translateY(-50%);
+            width: 8px; height: 8px;
+            background: #a78bfa;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #a78bfa;
+        }
+
+        /* ── Header ──────────────────────────────────────── */
+        .slide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 20px;
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            flex-shrink: 0;
+        }
+        .slide-logo {
+            color: white;
+            font-weight: 700;
+            font-size: 0.8em;
+            letter-spacing: 0.06em;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            opacity: 0.92;
+        }
+        .logo-icon {
+            width: 22px; height: 22px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 5px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px;
+        }
+        .slide-category {
+            font-size: 0.7em;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            transition: background 0.3s, color 0.3s;
+        }
+        .cat-intro    { background: rgba(255,255,255,0.22); color: #fff; }
+        .cat-core     { background: #059669; color: #fff; }
+        .cat-tip      { background: #d97706; color: #fff; }
+        .cat-advanced { background: #dc2626; color: #fff; }
+        .cat-debug    { background: #2563eb; color: #fff; }
+        .cat-ci       { background: #7c3aed; color: #fff; }
+
+        /* ── Slides Wrapper ──────────────────────────────── */
+        .slides-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        .slide {
+            position: absolute;
+            inset: 0;
+            padding: 28px 50px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .slide.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* ── Title Slide ─────────────────────────────────── */
+        .slide.title-slide {
+            background: linear-gradient(145deg, #0f0433 0%, #3b0c7a 45%, #5b21b6 100%);
+            align-items: center;
+            text-align: center;
+            padding: 40px;
+        }
+        .title-icon {
+            font-size: 3.2em;
+            margin-bottom: 12px;
+            animation: float 3.5s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50%       { transform: translateY(-10px); }
+        }
+        .title-slide h1 {
+            font-size: 4.2em;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #fff 30%, #c4b5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+        .title-slide .subtitle {
+            color: rgba(255,255,255,0.8);
+            font-size: 1.4em;
+            font-weight: 400;
+        }
+        .title-slide .meta {
+            color: rgba(255,255,255,0.45);
+            font-size: 0.9em;
+            margin-top: 20px;
+        }
+        .title-badges {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 18px;
+            flex-wrap: wrap;
+        }
+        .title-badge {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.75);
+            padding: 3px 11px;
+            border-radius: 20px;
+            font-size: 0.78em;
+            font-weight: 600;
+        }
+
+        /* ── Content Slides ──────────────────────────────── */
+        .slide h2 {
+            font-size: 1.75em;
+            color: var(--primary);
+            margin-bottom: 16px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .slide h3 {
+            font-size: 0.8em;
+            color: var(--primary);
+            margin-top: 12px;
+            margin-bottom: 6px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+        .slide p, .slide li {
+            font-size: 0.95em;
+            color: #374151;
+            line-height: 1.65;
+        }
+        .slide ul {
+            margin-left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .slide li::marker { color: var(--primary-light); }
+
+        /* ── Tip Slides ──────────────────────────────────── */
+        .slide.tip-slide { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); }
+        .slide.tip-slide h2 { color: #92400e; }
+        .slide.tip-slide li::marker { color: var(--amber); }
+
+        /* ── Code Blocks ─────────────────────────────────── */
+        .code-block {
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border-radius: 10px;
+            padding: 13px 18px;
+            margin: 10px 0;
+            font-family: 'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace;
+            font-size: 0.78em;
+            line-height: 1.75;
+            overflow-x: auto;
+            border: 1px solid rgba(139,92,246,0.2);
+            white-space: pre;
+        }
+        .code-block .kw  { color: #cba6f7; font-weight: 600; }  /* keywords */
+        .code-block .fn  { color: #89dceb; }                     /* functions */
+        .code-block .str { color: #a6e3a1; }                     /* strings */
+        .code-block .cm  { color: #6c7086; font-style: italic; } /* comments */
+        .code-block .num { color: #fab387; }                     /* numbers */
+        .code-block .cls { color: #f9e2af; }                     /* class names */
+        .code-block .cmd { color: #89b4fa; }                     /* shell commands */
+
+        /* ── Two-column Layout ───────────────────────────── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        /* ── Browser Grid ────────────────────────────────── */
+        .browser-grid {
+            display: grid;
+            grid-template-columns: repeat(3,1fr);
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .browser-card {
+            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+            border: 1px solid #c4b5fd;
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+        }
+        .browser-card .bicon { font-size: 1.8em; margin-bottom: 6px; }
+        .browser-card strong { display: block; color: var(--primary); font-size: 0.9em; margin-bottom: 3px; }
+        .browser-card p { font-size: 0.78em !important; color: #6b7280; }
+
+        /* ── Highlight chips ─────────────────────────────── */
+        .highlight {
+            background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+            color: var(--primary-dark);
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-family: monospace;
+            font-size: 0.88em;
+        }
+        .tip-highlight {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-family: monospace;
+            font-size: 0.88em;
+        }
+
+        /* ── Best Practices Checklist ────────────────────── */
+        .checklist {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-left: 0 !important;
+            list-style: none !important;
+        }
+        .checklist li {
+            display: flex;
+            align-items: flex-start;
+            gap: 7px;
+            padding: 8px 11px;
+            background: #f5f3ff;
+            border-radius: 8px;
+            border-left: 3px solid var(--primary-light);
+        }
+        .checklist li::marker { content: none; }
+
+        /* ── Resources grid ──────────────────────────────── */
+        .res-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+            max-width: 680px;
+        }
+        .res-card {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 10px;
+            padding: 13px 15px;
+            text-decoration: none;
+            display: block;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            cursor: pointer;
+        }
+        .res-card:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: rgba(196,181,253,0.6);
+            transform: translateY(-2px);
+        }
+        .res-card strong { color: #c4b5fd; display: block; margin-bottom: 4px; }
+        .res-card p { color: rgba(255,255,255,0.65); font-size: 0.8em !important; }
+
+        /* ── Controls ────────────────────────────────────── */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 18px;
+            background: #f8f7ff;
+            border-top: 1px solid #e9e7ff;
+            flex-shrink: 0;
+        }
+        .nav-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .nav-btn:hover:not(:disabled) { background: var(--primary-light); transform: translateY(-1px); }
+        .nav-btn:disabled { background: #d1d5db; cursor: not-allowed; }
+
+        .controls-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .slide-counter {
+            color: #9ca3af;
+            font-size: 0.78em;
+            font-weight: 600;
+        }
+        .dots {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 420px;
+        }
+        .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: #d1d5db;
+            cursor: pointer;
+            transition: all 0.25s;
+            border: none;
+        }
+        .dot.active {
+            background: var(--primary);
+            width: 18px;
+            border-radius: 3px;
+        }
+        .dot:hover:not(.active) { background: var(--primary-light); }
+
+        .controls-right {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .icon-btn {
+            background: none;
+            border: 1px solid #d1d5db;
+            color: #6b7280;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75em;
+            transition: all 0.2s;
+        }
+        .icon-btn:hover { background: #f3f4f6; color: var(--primary); border-color: var(--primary-light); }
+
+        /* ── Keyboard Help Modal ─────────────────────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        .modal h3 {
+            font-size: 1.1em;
+            color: var(--primary);
+            margin-bottom: 18px;
+            font-weight: 700;
+        }
+        .shortcut-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 0;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 0.88em;
+        }
+        .shortcut-row:last-of-type { border: none; }
+        .shortcut-desc { color: #374151; }
+        .shortcut-keys { display: flex; gap: 4px; }
+        kbd {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 3px;
+            padding: 1px 6px;
+            font-size: 0.85em;
+            font-family: monospace;
+        }
+        .modal-close {
+            margin-top: 18px;
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 9px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+        .modal-close:hover { background: var(--primary-light); }
+    </style>
+</head>
+<body>
+
+<div class="slide-container">
+
+    <!-- ── Progress Bar ──────────────────────────────── -->
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+
+    <!-- ── Header ────────────────────────────────────── -->
+    <div class="slide-header">
+        <div class="slide-logo">
+            <div class="logo-icon">🎭</div>
+            PLAYWRIGHT
+        </div>
+        <span class="slide-category cat-intro" id="categoryBadge">Intro</span>
+    </div>
+
+    <!-- ── Slides ─────────────────────────────────────── -->
+    <div class="slides-wrapper">
+
+        <!-- 1 · Title -->
+        <div class="slide title-slide active" data-category="intro">
+            <div class="title-icon">🎭</div>
+            <h1>Playwright</h1>
+            <p class="subtitle">Modern Web Testing &amp; Automation</p>
+            <p class="meta">Tips, Tricks &amp; Best Practices · 2025</p>
+            <div class="title-badges">
+                <span class="title-badge">JavaScript</span>
+                <span class="title-badge">TypeScript</span>
+                <span class="title-badge">Cross-Browser</span>
+                <span class="title-badge">E2E Testing</span>
+                <span class="title-badge">Microsoft</span>
+            </div>
+        </div>
+
+        <!-- 2 · What is Playwright? -->
+        <div class="slide" data-category="intro">
+            <h2>🔎 What is Playwright?</h2>
+            <div class="two-col">
+                <ul>
+                    <li>Open-source browser automation library by <strong>Microsoft</strong></li>
+                    <li>Built for reliable, fast end-to-end testing</li>
+                    <li>Cross-browser: Chromium, Firefox, WebKit</li>
+                    <li>Multi-language: JS, TypeScript, Python, Java, .NET</li>
+                    <li>Handles SPAs, iframes, shadow DOM, network, files</li>
+                </ul>
+                <div class="code-block"><span class="kw">import</span> { test, expect } <span class="kw">from</span> <span class="str">'@playwright/test'</span>;
+
+test(<span class="str">'page has title'</span>, <span class="kw">async</span> ({ page }) => {
+  <span class="kw">await</span> page.<span class="fn">goto</span>(<span class="str">'https://playwright.dev'</span>);
+  <span class="kw">await</span> expect(page)
+    .<span class="fn">toHaveTitle</span>(<span class="str">/Playwright/</span>);
+});</div>
+            </div>
+        </div>
+
+        <!-- 3 · Installation & Setup -->
+        <div class="slide" data-category="intro">
+            <h2>📦 Installation &amp; Setup</h2>
+            <div class="code-block"><span class="cm"># Scaffold a new project (recommended)</span>
+<span class="cmd">npm init playwright@latest</span>
+
+<span class="cm"># Or add to an existing project</span>
+<span class="cmd">npm install -D @playwright/test</span>
+<span class="cmd">npx playwright install</span></div>
+            <h3>Generate tests interactively</h3>
+            <div class="code-block"><span class="cmd">npx playwright codegen https://example.com</span></div>
+            <ul>
+                <li>Interactive browser opens — your clicks generate test code in real time</li>
+                <li>Export to JS, TypeScript, Python, Java, or .NET</li>
+            </ul>
+        </div>
+
+        <!-- 4 · Supported Browsers -->
+        <div class="slide" data-category="core">
+            <h2>🌐 Supported Browsers</h2>
+            <div class="browser-grid">
+                <div class="browser-card">
+                    <div class="bicon">🔵</div>
+                    <strong>Chromium</strong>
+                    <p>Chrome &amp; Edge compatible, fastest execution</p>
+                </div>
+                <div class="browser-card">
+                    <div class="bicon">🦊</div>
+                    <strong>Firefox</strong>
+                    <p>Mozilla Gecko engine, fully supported</p>
+                </div>
+                <div class="browser-card">
+                    <div class="bicon">🧭</div>
+                    <strong>WebKit</strong>
+                    <p>Safari engine — no Mac required</p>
+                </div>
+            </div>
+            <div class="code-block" style="margin-top:12px"><span class="cm">// playwright.config.ts — run against all browsers at once</span>
+projects: [
+  { name: <span class="str">'chrome'</span>,   use: { ...devices[<span class="str">'Desktop Chrome'</span>] }  },
+  { name: <span class="str">'firefox'</span>,  use: { ...devices[<span class="str">'Desktop Firefox'</span>] } },
+  { name: <span class="str">'webkit'</span>,   use: { ...devices[<span class="str">'Desktop Safari'</span>] }  },
+  { name: <span class="str">'mobile'</span>,   use: { ...devices[<span class="str">'iPhone 15'</span>] }        },
+],</div>
+        </div>
+
+        <!-- 5 · Element Selectors -->
+        <div class="slide" data-category="core">
+            <h2>🎯 Element Locators</h2>
+            <ul>
+                <li><span class="highlight">getByRole</span> — <code>page.getByRole('button', { name: 'Submit' })</code></li>
+                <li><span class="highlight">getByText</span> — <code>page.getByText('Welcome back')</code></li>
+                <li><span class="highlight">getByLabel</span> — <code>page.getByLabel('Email address')</code></li>
+                <li><span class="highlight">getByPlaceholder</span> — <code>page.getByPlaceholder('Search…')</code></li>
+                <li><span class="highlight">getByAltText</span> — <code>page.getByAltText('Company logo')</code></li>
+                <li><span class="highlight">getByTestId</span> — <code>page.getByTestId('submit-btn')</code></li>
+                <li><span class="highlight">locator</span> — <code>page.locator('.card').first()</code> (CSS / XPath fallback)</li>
+            </ul>
+        </div>
+
+        <!-- 6 · Tip: Efficient Selectors -->
+        <div class="slide tip-slide" data-category="tip">
+            <h2>💡 Tip: Prefer User-Facing Locators</h2>
+            <div class="code-block"><span class="cm">// ❌ Brittle — breaks on any CSS refactor</span>
+page.<span class="fn">locator</span>(<span class="str">'body > div > section > button:nth-child(2)'</span>)
+
+<span class="cm">// ⚠️  Still coupled to implementation details</span>
+page.<span class="fn">getByTestId</span>(<span class="str">'login-btn'</span>)
+
+<span class="cm">// ✅ Best — mirrors how real users see the page</span>
+page.<span class="fn">getByRole</span>(<span class="str">'button'</span>, { name: <span class="str">'Log in'</span> })
+page.<span class="fn">getByLabel</span>(<span class="str">'Email address'</span>)</div>
+            <ul>
+                <li>Role/label selectors simultaneously <strong>test accessibility</strong></li>
+                <li>They survive redesigns; CSS selectors often don't</li>
+                <li>Fall back to <strong>getByTestId</strong> only when no semantic option exists</li>
+            </ul>
+        </div>
+
+        <!-- 7 · Auto-Waiting & Assertions -->
+        <div class="slide" data-category="core">
+            <h2>⏱️ Auto-Waiting &amp; Assertions</h2>
+            <div class="code-block"><span class="cm">// Playwright waits automatically — no manual sleep() needed</span>
+<span class="kw">await</span> page.<span class="fn">getByRole</span>(<span class="str">'button'</span>, { name: <span class="str">'Submit'</span> }).<span class="fn">click</span>();
+<span class="kw">await</span> page.<span class="fn">getByLabel</span>(<span class="str">'Email'</span>).<span class="fn">fill</span>(<span class="str">'alice@example.com'</span>);
+
+<span class="cm">// Web-first assertions — retries until condition is met (5 s default)</span>
+<span class="kw">await</span> <span class="fn">expect</span>(page.<span class="fn">getByText</span>(<span class="str">'Welcome, Alice!'</span>)).<span class="fn">toBeVisible</span>();
+<span class="kw">await</span> <span class="fn">expect</span>(page).<span class="fn">toHaveURL</span>(<span class="str">/dashboard/</span>);
+<span class="kw">await</span> <span class="fn">expect</span>(page.<span class="fn">getByRole</span>(<span class="str">'listitem'</span>)).<span class="fn">toHaveCount</span>(<span class="num">5</span>);</div>
+            <ul>
+                <li><strong>Actions</strong> wait: attached, visible, stable, enabled, not-obscured</li>
+                <li><strong>Assertions</strong> retry: no need to poll manually</li>
+            </ul>
+        </div>
+
+        <!-- 8 · Tip: Smart Waits -->
+        <div class="slide tip-slide" data-category="tip">
+            <h2>💡 Tip: Avoid These Anti-Patterns</h2>
+            <div class="code-block"><span class="cm">// ❌ Never hardcode delays — root cause of flakiness</span>
+<span class="kw">await</span> page.<span class="fn">waitForTimeout</span>(<span class="num">3000</span>);
+
+<span class="cm">// ❌ Avoid — waits for network quiet, not your element</span>
+<span class="kw">await</span> page.<span class="fn">waitForLoadState</span>(<span class="str">'networkidle'</span>);
+
+<span class="cm">// ✅ Wait for exactly what the test cares about</span>
+<span class="kw">await</span> <span class="fn">expect</span>(page.<span class="fn">getByText</span>(<span class="str">'Results loaded'</span>)).<span class="fn">toBeVisible</span>();
+<span class="kw">await</span> <span class="fn">expect</span>(page.<span class="fn">locator</span>(<span class="str">'.data-row'</span>)).<span class="fn">toHaveCount</span>(<span class="num">10</span>);</div>
+            <p style="margin-top:10px">⚠️ Flaky tests are almost always caused by wrong wait strategies — trust Playwright's auto-waiting!</p>
+        </div>
+
+        <!-- 9 · Working with Forms -->
+        <div class="slide" data-category="core">
+            <h2>📝 Working with Forms</h2>
+            <div class="code-block"><span class="cm">// Fill text fields</span>
+<span class="kw">await</span> page.<span class="fn">getByLabel</span>(<span class="str">'Email'</span>).<span class="fn">fill</span>(<span class="str">'alice@example.com'</span>);
+<span class="kw">await</span> page.<span class="fn">getByLabel</span>(<span class="str">'Password'</span>).<span class="fn">fill</span>(<span class="str">'s3cret!'</span>);
+
+<span class="cm">// Select a dropdown option</span>
+<span class="kw">await</span> page.<span class="fn">getByLabel</span>(<span class="str">'Country'</span>).<span class="fn">selectOption</span>(<span class="str">'US'</span>);
+
+<span class="cm">// Toggle a checkbox</span>
+<span class="kw">await</span> page.<span class="fn">getByLabel</span>(<span class="str">'Remember me'</span>).<span class="fn">check</span>();
+
+<span class="cm">// Upload a file</span>
+<span class="kw">await</span> page.<span class="fn">getByLabel</span>(<span class="str">'Avatar'</span>).<span class="fn">setInputFiles</span>(<span class="str">'./photo.png'</span>);
+
+<span class="cm">// Submit</span>
+<span class="kw">await</span> page.<span class="fn">getByRole</span>(<span class="str">'button'</span>, { name: <span class="str">'Sign in'</span> }).<span class="fn">click</span>();</div>
+        </div>
+
+        <!-- 10 · Dialogs & Popups -->
+        <div class="slide" data-category="core">
+            <h2>💬 Dialogs &amp; Popups</h2>
+            <div class="code-block"><span class="cm">// Accept (or dismiss) a native browser dialog</span>
+page.<span class="fn">once</span>(<span class="str">'dialog'</span>, dialog => dialog.<span class="fn">accept</span>());
+
+<span class="cm">// Capture a new tab opened by a link click</span>
+<span class="kw">const</span> [newPage] = <span class="kw">await</span> Promise.<span class="fn">all</span>([
+  context.<span class="fn">waitForEvent</span>(<span class="str">'page'</span>),
+  page.<span class="fn">getByRole</span>(<span class="str">'link'</span>, { name: <span class="str">'Open report'</span> }).<span class="fn">click</span>(),
+]);
+<span class="kw">await</span> newPage.<span class="fn">waitForLoadState</span>();
+
+<span class="cm">// Download a file</span>
+<span class="kw">const</span> download = <span class="kw">await</span> page.<span class="fn">waitForEvent</span>(<span class="str">'download'</span>);
+<span class="kw">await</span> download.<span class="fn">saveAs</span>(<span class="str">'./invoice.pdf'</span>);</div>
+        </div>
+
+        <!-- 11 · Network Interception -->
+        <div class="slide" data-category="advanced">
+            <h2>🌐 Network Interception</h2>
+            <div class="code-block"><span class="cm">// Block images to speed up tests</span>
+<span class="kw">await</span> page.<span class="fn">route</span>(<span class="str">'**/*.{png,jpg,gif,svg,webp}'</span>, r => r.<span class="fn">abort</span>());
+
+<span class="cm">// Spy on API responses</span>
+page.<span class="fn">on</span>(<span class="str">'response'</span>, res => {
+  <span class="kw">if</span> (res.<span class="fn">url</span>().<span class="fn">includes</span>(<span class="str">'/api/'</span>))
+    console.<span class="fn">log</span>(res.<span class="fn">status</span>(), res.<span class="fn">url</span>());
+});
+
+<span class="cm">// Wait for a specific API call triggered by a user action</span>
+<span class="kw">const</span> resPromise = page.<span class="fn">waitForResponse</span>(<span class="str">'**/api/users'</span>);
+<span class="kw">await</span> page.<span class="fn">getByRole</span>(<span class="str">'button'</span>, { name: <span class="str">'Load users'</span> }).<span class="fn">click</span>();
+<span class="kw">const</span> res = <span class="kw">await</span> resPromise;
+console.<span class="fn">log</span>(<span class="kw">await</span> res.<span class="fn">json</span>());</div>
+        </div>
+
+        <!-- 12 · Tip: Mock API Responses -->
+        <div class="slide tip-slide" data-category="tip">
+            <h2>💡 Tip: Mock API Responses</h2>
+            <div class="code-block"><span class="cm">// Use route.fulfill() to return fake data (not abort!)</span>
+<span class="kw">await</span> page.<span class="fn">route</span>(<span class="str">'**/api/users'</span>, <span class="kw">async</span> route => {
+  <span class="kw">await</span> route.<span class="fn">fulfill</span>({
+    status: <span class="num">200</span>,
+    contentType: <span class="str">'application/json'</span>,
+    body: JSON.<span class="fn">stringify</span>([
+      { id: <span class="num">1</span>, name: <span class="str">'Alice'</span> },
+      { id: <span class="num">2</span>, name: <span class="str">'Bob'</span>   },
+    ]),
+  });
+});</div>
+            <ul>
+                <li>Isolate tests from flaky backends — deterministic results every time</li>
+                <li>Easily simulate errors: set <code>status: 500</code> or <code>status: 401</code></li>
+                <li>Can also use <code>route.fetch()</code> then modify the real response</li>
+            </ul>
+        </div>
+
+        <!-- 13 · Page Object Model -->
+        <div class="slide" data-category="advanced">
+            <h2>🏗️ Page Object Model (POM)</h2>
+            <div class="code-block"><span class="cm">// pages/LoginPage.ts</span>
+<span class="kw">export class</span> <span class="cls">LoginPage</span> {
+  <span class="kw">constructor</span>(<span class="kw">private</span> page: <span class="cls">Page</span>) {}
+
+  emailInput    = this.page.<span class="fn">getByLabel</span>(<span class="str">'Email'</span>);
+  passwordInput = this.page.<span class="fn">getByLabel</span>(<span class="str">'Password'</span>);
+
+  <span class="kw">async</span> <span class="fn">goto</span>() { <span class="kw">await</span> this.page.<span class="fn">goto</span>(<span class="str">'/login'</span>); }
+
+  <span class="kw">async</span> <span class="fn">login</span>(email: string, pass: string) {
+    <span class="kw">await</span> this.emailInput.<span class="fn">fill</span>(email);
+    <span class="kw">await</span> this.passwordInput.<span class="fn">fill</span>(pass);
+    <span class="kw">await</span> this.page.<span class="fn">getByRole</span>(<span class="str">'button'</span>, { name: <span class="str">'Log in'</span> }).<span class="fn">click</span>();
+  }
+}
+
+<span class="cm">// In your test:</span>
+<span class="kw">const</span> loginPage = <span class="kw">new</span> <span class="cls">LoginPage</span>(page);
+<span class="kw">await</span> loginPage.<span class="fn">login</span>(<span class="str">'alice@test.com'</span>, <span class="str">'s3cret'</span>);</div>
+        </div>
+
+        <!-- 14 · Playwright Fixtures -->
+        <div class="slide" data-category="advanced">
+            <h2>🔧 Playwright Fixtures</h2>
+            <div class="code-block"><span class="cm">// fixtures.ts — extend test with custom fixtures</span>
+<span class="kw">import</span> { test <span class="kw">as</span> base } <span class="kw">from</span> <span class="str">'@playwright/test'</span>;
+<span class="kw">import</span> { <span class="cls">LoginPage</span> } <span class="kw">from</span> <span class="str">'./pages/LoginPage'</span>;
+
+<span class="kw">export const</span> test = base.<span class="fn">extend</span>&lt;{ loginPage: <span class="cls">LoginPage</span> }&gt;({
+  loginPage: <span class="kw">async</span> ({ page }, use) => {
+    <span class="kw">const</span> lp = <span class="kw">new</span> <span class="cls">LoginPage</span>(page);
+    <span class="kw">await</span> lp.<span class="fn">goto</span>();
+    <span class="kw">await</span> use(lp);     <span class="cm">// ← provide fixture to test</span>
+    <span class="cm">// optional teardown runs here after each test</span>
+  },
+});
+
+<span class="cm">// Tests receive loginPage automatically — zero boilerplate</span>
+test(<span class="str">'login works'</span>, <span class="kw">async</span> ({ loginPage }) => {
+  <span class="kw">await</span> loginPage.<span class="fn">login</span>(<span class="str">'alice'</span>, <span class="str">'pass'</span>);
+});</div>
+        </div>
+
+        <!-- 15 · Screenshots & Video -->
+        <div class="slide" data-category="core">
+            <h2>📸 Screenshots, Video &amp; Traces</h2>
+            <div class="code-block"><span class="cm">// Take a full-page screenshot any time</span>
+<span class="kw">await</span> page.<span class="fn">screenshot</span>({ path: <span class="str">'shot.png'</span>, fullPage: <span class="kw">true</span> });
+
+<span class="cm">// Screenshot a single element</span>
+<span class="kw">await</span> page.<span class="fn">locator</span>(<span class="str">'.chart'</span>).<span class="fn">screenshot</span>({ path: <span class="str">'chart.png'</span> });
+
+<span class="cm">// playwright.config.ts — auto-capture on failure</span>
+use: {
+  screenshot: <span class="str">'only-on-failure'</span>,
+  video:      <span class="str">'retain-on-failure'</span>,
+  trace:      <span class="str">'retain-on-failure'</span>,
+}</div>
+            <ul>
+                <li><strong>Trace Viewer</strong>: timeline with every action, DOM snapshot, network &amp; console</li>
+                <li><code>npx playwright show-trace trace.zip</code> to replay any failed run</li>
+            </ul>
+        </div>
+
+        <!-- 16 · Test Codegen -->
+        <div class="slide" data-category="intro">
+            <h2>🎬 Test Codegen</h2>
+            <div class="code-block"><span class="cm"># Record in desktop Chrome</span>
+<span class="cmd">npx playwright codegen https://myapp.dev</span>
+
+<span class="cm"># Record in mobile emulation</span>
+<span class="cmd">npx playwright codegen --device="iPhone 15" https://myapp.dev</span>
+
+<span class="cm"># Save directly to a file</span>
+<span class="cmd">npx playwright codegen -o tests/my-flow.spec.ts https://myapp.dev</span></div>
+            <ul>
+                <li>Click around the browser — watch test code appear live in the panel</li>
+                <li>Inspector lets you explore and verify selectors before saving</li>
+                <li>Excellent starting point — then refine with Page Objects &amp; assertions</li>
+            </ul>
+        </div>
+
+        <!-- 17 · Tip: Test Structure -->
+        <div class="slide tip-slide" data-category="tip">
+            <h2>💡 Tip: Organize Tests Well</h2>
+            <div class="code-block">test.<span class="fn">describe</span>(<span class="str">'Login'</span>, () => {
+
+  test.<span class="fn">beforeEach</span>(<span class="kw">async</span> ({ page }) => {
+    <span class="kw">await</span> page.<span class="fn">goto</span>(<span class="str">'/login'</span>);  <span class="cm">// shared setup — DRY</span>
+  });
+
+  test(<span class="str">'valid credentials → dashboard'</span>, <span class="kw">async</span> ({ page }) => { <span class="cm">/*…*/</span> });
+  test(<span class="str">'wrong password → error banner'</span>,  <span class="kw">async</span> ({ page }) => { <span class="cm">/*…*/</span> });
+  test(<span class="str">'empty form → field errors'</span>,       <span class="kw">async</span> ({ page }) => { <span class="cm">/*…*/</span> });
+
+});</div>
+            <ul>
+                <li>Each test must be <strong>independent</strong> — never share state between tests</li>
+                <li>Use <code>test.only</code> / <code>test.skip</code> during development</li>
+                <li>Group related scenarios; nest <code>describe</code> blocks for sub-features</li>
+            </ul>
+        </div>
+
+        <!-- 18 · Debugging -->
+        <div class="slide" data-category="debug">
+            <h2>🐛 Debugging Tests</h2>
+            <div class="code-block"><span class="cm"># Open the Playwright Inspector (step-through debugger)</span>
+<span class="cmd">PWDEBUG=1 npx playwright test</span>
+
+<span class="cm"># Run headed with slow motion (500 ms per action)</span>
+<span class="cmd">npx playwright test --headed --slow-mo=500</span>
+
+<span class="cm"># Replay a trace recorded from a CI failure</span>
+<span class="cmd">npx playwright show-trace trace.zip</span></div>
+            <div class="code-block"><span class="cm">// Pause inside a test to inspect live — opens Inspector</span>
+<span class="kw">await</span> page.<span class="fn">pause</span>();</div>
+            <ul>
+                <li><strong>Inspector</strong>: step through, evaluate locators, explore the DOM live</li>
+                <li><strong>Trace Viewer</strong>: full timeline — actions, network, screenshots, console</li>
+            </ul>
+        </div>
+
+        <!-- 19 · CI/CD Integration -->
+        <div class="slide" data-category="ci">
+            <h2>🚀 CI/CD Integration</h2>
+            <div class="code-block"><span class="cm"># .github/workflows/playwright.yml</span>
+- name: Install dependencies
+  run: <span class="cmd">npm ci</span>
+
+- name: Install Playwright browsers
+  run: <span class="cmd">npx playwright install --with-deps</span>
+
+- name: Run tests
+  run: <span class="cmd">npx playwright test</span>
+
+- name: Upload HTML report
+  uses: actions/upload-artifact@v4
+  with:
+    name: playwright-report
+    path: playwright-report/</div>
+            <ul>
+                <li>Tests run in parallel across workers by default (set <code>workers</code> in config)</li>
+                <li>Shard across multiple CI machines: <code>--shard=1/4</code></li>
+            </ul>
+        </div>
+
+        <!-- 20 · Best Practices -->
+        <div class="slide" data-category="core">
+            <h2>✅ Best Practices</h2>
+            <ul class="checklist">
+                <li>✅ Use <strong>getByRole / getByLabel</strong> selectors</li>
+                <li>✅ Structure with <strong>describe + beforeEach</strong></li>
+                <li>✅ Apply <strong>Page Object Model</strong> for scale</li>
+                <li>✅ Leverage <strong>fixtures</strong> for setup/teardown</li>
+                <li>✅ Never use <strong>sleep()</strong> — trust auto-waiting</li>
+                <li>✅ Mock APIs with <strong>route.fulfill()</strong></li>
+                <li>✅ Enable <strong>trace: 'retain-on-failure'</strong></li>
+                <li>✅ Keep tests <strong>independent &amp; focused</strong></li>
+            </ul>
+        </div>
+
+        <!-- 21 · Resources -->
+        <div class="slide title-slide" data-category="intro">
+            <div class="title-icon">🔗</div>
+            <h1 style="font-size:3em">Resources</h1>
+            <div class="res-grid">
+                <a class="res-card" href="https://playwright.dev" target="_blank" rel="noopener">
+                    <strong>📚 Official Docs</strong>
+                    <p>playwright.dev</p>
+                </a>
+                <a class="res-card" href="https://github.com/microsoft/playwright" target="_blank" rel="noopener">
+                    <strong>🐙 GitHub</strong>
+                    <p>github.com/microsoft/playwright</p>
+                </a>
+                <a class="res-card" href="https://aka.ms/playwright-slack" target="_blank" rel="noopener">
+                    <strong>💬 Discord Community</strong>
+                    <p>aka.ms/playwright-slack</p>
+                </a>
+                <a class="res-card" href="https://github.com/mxschmitt/awesome-playwright" target="_blank" rel="noopener">
+                    <strong>⭐ Awesome Playwright</strong>
+                    <p>github.com/mxschmitt/awesome-playwright</p>
+                </a>
+            </div>
+            <p style="color:rgba(255,255,255,0.5);margin-top:24px;font-size:1.1em">Happy Testing! 🎉</p>
+        </div>
+
+    </div><!-- /slides-wrapper -->
+
+    <!-- ── Controls ───────────────────────────────────── -->
+    <div class="controls">
+        <button class="nav-btn" id="prevBtn" onclick="move(-1)">← Prev</button>
+
+        <div class="controls-center">
+            <div class="dots" id="dotsEl"></div>
+            <span class="slide-counter">
+                <span id="slideNum">1</span> / <span id="totalNum">21</span>
+            </span>
+        </div>
+
+        <div class="controls-right">
+            <button class="icon-btn" onclick="toggleHelp()">⌨ Shortcuts</button>
+            <button class="icon-btn" id="fsBtn" onclick="toggleFullscreen()">⛶</button>
+            <button class="nav-btn" id="nextBtn" onclick="move(1)">Next →</button>
+        </div>
+    </div>
+
+</div><!-- /slide-container -->
+
+<!-- ── Keyboard Help Modal ─────────────────────────────── -->
+<div class="modal-overlay" id="helpModal" onclick="closeHelp(event)">
+    <div class="modal">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <div class="shortcut-row"><span class="shortcut-desc">Next slide</span>       <span class="shortcut-keys"><kbd>→</kbd> <kbd>Space</kbd> <kbd>PgDn</kbd></span></div>
+        <div class="shortcut-row"><span class="shortcut-desc">Previous slide</span>   <span class="shortcut-keys"><kbd>←</kbd> <kbd>PgUp</kbd></span></div>
+        <div class="shortcut-row"><span class="shortcut-desc">First slide</span>      <span class="shortcut-keys"><kbd>Home</kbd></span></div>
+        <div class="shortcut-row"><span class="shortcut-desc">Last slide</span>       <span class="shortcut-keys"><kbd>End</kbd></span></div>
+        <div class="shortcut-row"><span class="shortcut-desc">Toggle fullscreen</span><span class="shortcut-keys"><kbd>F</kbd></span></div>
+        <div class="shortcut-row"><span class="shortcut-desc">This dialog</span>      <span class="shortcut-keys"><kbd>?</kbd> <kbd>Esc</kbd></span></div>
+        <button class="modal-close" onclick="toggleHelp()">Close</button>
+    </div>
+</div>
+
+<script>
+    const CATEGORIES = {
+        intro:    { label: 'Intro',     cls: 'cat-intro'    },
+        core:     { label: 'Core',      cls: 'cat-core'     },
+        tip:      { label: 'Pro Tip',   cls: 'cat-tip'      },
+        advanced: { label: 'Advanced',  cls: 'cat-advanced'  },
+        debug:    { label: 'Debugging', cls: 'cat-debug'    },
+        ci:       { label: 'CI/CD',     cls: 'cat-ci'       },
+    };
+
+    const slides      = Array.from(document.querySelectorAll('.slide'));
+    const totalSlides = slides.length;
+    let   current     = 0;
+    let   busy        = false;
+
+    document.getElementById('totalNum').textContent = totalSlides;
+
+    // Build nav dots
+    const dotsEl = document.getElementById('dotsEl');
+    slides.forEach((_, i) => {
+        const d = document.createElement('button');
+        d.className = 'dot' + (i === 0 ? ' active' : '');
+        d.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+        d.onclick = () => goTo(i);
+        dotsEl.appendChild(d);
+    });
+
+    function updateUI() {
+        document.getElementById('slideNum').textContent = current + 1;
+        document.getElementById('prevBtn').disabled = current === 0;
+        document.getElementById('nextBtn').disabled = current === totalSlides - 1;
+
+        // dots
+        dotsEl.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === current));
+
+        // progress bar
+        const pct = totalSlides <= 1 ? 100 : (current / (totalSlides - 1)) * 100;
+        document.getElementById('progressFill').style.width = pct + '%';
+
+        // category badge
+        const badge = document.getElementById('categoryBadge');
+        const cat   = slides[current].dataset.category || 'intro';
+        const info  = CATEGORIES[cat] || CATEGORIES.intro;
+        badge.textContent = info.label;
+        badge.className   = 'slide-category ' + info.cls;
+    }
+
+    function goTo(n, dir) {
+        if (busy || n === current || n < 0 || n >= totalSlides) return;
+        busy = true;
+
+        const from = slides[current];
+        const to   = slides[n];
+        const fwd  = dir != null ? dir === 'next' : n > current;
+
+        // Position incoming slide off-screen
+        to.style.transition = 'none';
+        to.style.transform  = fwd ? 'translateX(55px)' : 'translateX(-55px)';
+        to.style.opacity    = '0';
+
+        // Force reflow so transition kicks in
+        to.getBoundingClientRect();
+
+        const T = 'opacity 0.38s ease, transform 0.38s cubic-bezier(.4,0,.2,1)';
+
+        // Animate outgoing
+        from.style.transition = T;
+        from.style.transform  = fwd ? 'translateX(-55px)' : 'translateX(55px)';
+        from.style.opacity    = '0';
+        from.classList.remove('active');
+
+        // Animate incoming
+        to.style.transition = T;
+        to.style.transform  = 'translateX(0)';
+        to.style.opacity    = '1';
+        to.classList.add('active');
+
+        current = n;
+        updateUI();
+
+        setTimeout(() => {
+            from.style.cssText = '';   // restore CSS class rules
+            to.style.cssText   = '';
+            busy = false;
+        }, 420);
+    }
+
+    function move(delta) {
+        goTo(current + delta, delta > 0 ? 'next' : 'prev');
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', e => {
+        if (document.getElementById('helpModal').classList.contains('open')) {
+            if (e.key === 'Escape' || e.key === '?') toggleHelp();
+            return;
+        }
+        switch (e.key) {
+            case 'ArrowRight': case ' ': case 'PageDown': e.preventDefault(); move(1);  break;
+            case 'ArrowLeft':            case 'PageUp':   e.preventDefault(); move(-1); break;
+            case 'Home': goTo(0);                 break;
+            case 'End':  goTo(totalSlides - 1);   break;
+            case 'f': case 'F': toggleFullscreen(); break;
+            case '?': toggleHelp(); break;
+        }
+    });
+
+    function toggleHelp() {
+        document.getElementById('helpModal').classList.toggle('open');
+    }
+    function closeHelp(e) {
+        if (e.target === e.currentTarget) toggleHelp();
+    }
+
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    // Bootstrap
+    updateUI();
+    document.getElementById('prevBtn').disabled = true;
+</script>
+
+</body>
+</html>
