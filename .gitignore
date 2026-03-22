@@ -1,0 +1,6 @@
+# Claude Code internal files
+.claude/
+
+# Root-level duplicates (canonical copies are in Web-App-Pentest-Presentation/)
+Exam-Info.png
+Presentation.html
