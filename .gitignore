@@ -4,3 +4,9 @@
 # Root-level duplicates (canonical copies are in Web-App-Pentest-Presentation/)
 Exam-Info.png
 Presentation.html
+
+# Node.js
+node_modules/
+package.json
+package-lock.json
+screenshot.mjs
