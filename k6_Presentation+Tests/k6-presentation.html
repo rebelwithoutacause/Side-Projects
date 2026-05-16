@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>k6 Performance Testing</title>
+<style>
+/* ── DESIGN TOKENS ─────────────────────────────────────────── */
+:root {
+  --bg:        #09090f;
+  --surface:   #111119;
+  --surface2:  #18181f;
+  --border:    #232330;
+  --primary:   #7c6af7;
+  --primary-a: rgba(124,106,247,.15);
+  --orange:    #ff6b35;
+  --teal:      #22d3a2;
+  --blue:      #38bdf8;
+  --yellow:    #f59e0b;
+  --red:       #f87171;
+  --text:      #e1e1eb;
+  --muted:     #70708a;
+  --dim:       #2e2e3e;
+  --radius:    12px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Code','Fira Code','Consolas',monospace;
+}
+
+/* ── RESET ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  user-select: none;
+}
+
+/* ── SHELL ──────────────────────────────────────────────────── */
+.shell {
+  width: 1000px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,.6), 0 0 0 1px var(--border);
+}
+
+/* ── TOPBAR ─────────────────────────────────────────────────── */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -.3px;
+}
+
+.section-name {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 3px 10px;
+  background: var(--surface2);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.slide-counter {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .5px;
+}
+
+/* ── STAGE AREA ─────────────────────────────────────────────── */
+.stage {
+  position: relative;
+  width: 1000px;
+  height: 560px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* ── SLIDE ──────────────────────────────────────────────────── */
+.slide {
+  position: absolute;
+  inset: 0;
+  padding: 48px 60px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(18px);
+  transition: opacity .22s ease, transform .22s ease;
+}
+
+.slide.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.slide.exit {
+  opacity: 0;
+  transform: translateX(-18px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+/* ── PROGRESS BAR (top of stage) ────────────────────────────── */
+.stage::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--orange));
+  width: var(--progress, 4%);
+  transition: width .3s ease;
+  z-index: 10;
+}
+
+/* ── BOTTOMBAR ──────────────────────────────────────────────── */
+.bottombar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 0 28px;
+  flex-shrink: 0;
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  cursor: pointer;
+  transition: background .2s, transform .2s, width .2s;
+}
+
+.dot.active {
+  background: var(--primary);
+  width: 18px;
+  border-radius: 3px;
+}
+
+.dot:hover:not(.active) { background: var(--muted); }
+
+.nav-btns { display: flex; gap: 10px; }
+
+.btn-home {
+  padding: 7px 13px;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.btn-home:hover:not(:disabled) {
+  background: var(--surface2);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.btn:disabled { opacity: .25; cursor: default; }
+
+.hint {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+/* ── TYPOGRAPHY ─────────────────────────────────────────────── */
+h1 {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1.05;
+  color: #fff;
+}
+
+h2 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+  color: #fff;
+  margin-bottom: 26px;
+  line-height: 1.2;
+}
+
+h2 em { font-style: normal; color: var(--primary); }
+
+h3 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--primary);
+  margin-bottom: 5px;
+}
+
+p { font-size: 15.5px; line-height: 1.75; color: #aaabb8; }
+
+strong { color: var(--text); font-weight: 600; }
+
+.subtitle {
+  font-size: 18px;
+  color: var(--muted);
+  margin-top: 14px;
+  font-weight: 400;
+  letter-spacing: -.2px;
+}
+
+/* ── LABEL CHIP ─────────────────────────────────────────────── */
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+  border: 1px solid;
+}
+
+.label-intro  { background: rgba(124,106,247,.1); color: #a89aff; border-color: rgba(124,106,247,.3); }
+.label-setup  { background: rgba(56,189,248,.1);  color: #7dd3fc; border-color: rgba(56,189,248,.3); }
+.label-core   { background: rgba(34,211,162,.1);  color: #5eead4; border-color: rgba(34,211,162,.3); }
+.label-types  { background: rgba(245,158,11,.1);  color: #fcd34d; border-color: rgba(245,158,11,.3); }
+.label-run    { background: rgba(255,107,53,.1);   color: #fb923c; border-color: rgba(255,107,53,.3); }
+
+/* ── LISTS ──────────────────────────────────────────────────── */
+ul, ol { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+
+li {
+  font-size: 15.5px;
+  color: #aaabb8;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.55;
+}
+
+li::before {
+  content: '';
+  display: block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+li strong { color: var(--text); }
+
+/* ── CODE BLOCK ─────────────────────────────────────────────── */
+.code-wrap {
+  background: #0d0d14;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.code-bar {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.code-dots span {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+.code-dots span:nth-child(1) { background: #ff5f57; }
+.code-dots span:nth-child(2) { background: #febc2e; }
+.code-dots span:nth-child(3) { background: #28c840; }
+
+.code-filename {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+pre {
+  padding: 18px 22px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: #c9ccd6;
+  overflow: hidden;
+  margin: 0;
+}
+
+.kw  { color: #b392f0; }
+.fn  { color: #79b8ff; }
+.str { color: #85e89d; }
+.num { color: #f8c555; }
+.cm  { color: #6a737d; font-style: italic; }
+.key { color: #ffab70; }
+.op  { color: #f97583; }
+
+/* ── TABLE ──────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+
+thead th {
+  background: var(--surface2);
+  color: var(--muted);
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  border-bottom: 1px solid var(--border);
+}
+
+tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #1a1a24;
+  color: #aaabb8;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+
+td code, pre code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 5px;
+  color: var(--teal);
+}
+
+/* ── CARDS ──────────────────────────────────────────────────── */
+.cards { display: grid; gap: 16px; }
+.cards-3 { grid-template-columns: repeat(3, 1fr); }
+.cards-2 { grid-template-columns: repeat(2, 1fr); }
+
+.card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  transition: border-color .2s;
+}
+
+.card:hover { border-color: rgba(124,106,247,.4); }
+.card-icon { font-size: 24px; margin-bottom: 10px; display: block; }
+.card h3 { color: #fff; text-transform: none; font-size: 15px; letter-spacing: 0; margin-bottom: 6px; }
+.card p  { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+
+/* ── CALLOUT ────────────────────────────────────────────────── */
+.callout {
+  background: var(--primary-a);
+  border: 1px solid rgba(124,106,247,.25);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  padding: 13px 18px;
+  font-size: 14.5px;
+  color: #aaabb8;
+  line-height: 1.65;
+  margin-top: 18px;
+}
+
+.callout strong { color: #c4baff; }
+
+/* ── COLS LAYOUT ────────────────────────────────────────────── */
+.cols { display: grid; gap: 24px; align-items: start; }
+.cols-2 { grid-template-columns: 1fr 1fr; }
+.cols-60-40 { grid-template-columns: 60fr 40fr; }
+.cols-40-60 { grid-template-columns: 40fr 60fr; }
+
+/* ── PILL BADGE ─────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  border: 1px solid;
+}
+
+.pill-smoke  { background: rgba(34,197, 94,.1); color: #4ade80; border-color: rgba(34,197, 94,.3); }
+.pill-load   { background: rgba(56,189,248,.1);  color: #7dd3fc; border-color: rgba(56,189,248,.3); }
+.pill-stress { background: rgba(245,158,11,.1);  color: #fcd34d; border-color: rgba(245,158,11,.3); }
+.pill-spike  { background: rgba(248,113,113,.1); color: #fca5a5; border-color: rgba(248,113,113,.3); }
+
+/* ── VU CHART ───────────────────────────────────────────────── */
+.vu-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 72px;
+  padding: 0 4px;
+}
+
+.vu-seg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex: 1;
+}
+
+.vu-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+}
+
+.vu-lbl {
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bar-smoke  { background: linear-gradient(180deg, #4ade80, #166534); }
+.bar-load   { background: linear-gradient(180deg, #38bdf8, #075985); }
+.bar-stress { background: linear-gradient(180deg, #f59e0b, #78350f); }
+.bar-spike  { background: linear-gradient(180deg, #f87171, #7f1d1d); }
+.bar-purple { background: linear-gradient(180deg, var(--primary), #3730a3); }
+
+/* ── STEP LIST ──────────────────────────────────────────────── */
+.steps { display: flex; flex-direction: column; gap: 10px; }
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.step-num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--primary-a);
+  border: 1px solid rgba(124,106,247,.3);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-body { flex: 1; }
+.step-body strong { display: block; font-size: 14px; color: var(--text); margin-bottom: 2px; }
+.step-body span   { font-size: 13px; color: var(--muted); }
+
+/* ── CHECKLIST ──────────────────────────────────────────────── */
+.checklist { display: flex; flex-direction: column; gap: 8px; }
+
+.chk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14.5px;
+  color: #aaabb8;
+}
+
+.chk-box {
+  width: 18px; height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--primary);
+  background: var(--primary-a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--primary);
+}
+
+/* ── TITLE SLIDE ────────────────────────────────────────────── */
+.slide-title { justify-content: center; align-items: center; text-align: center; }
+
+.title-icon {
+  font-size: 56px;
+  display: block;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 0 24px rgba(124,106,247,.5));
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #fff 0%, #a89aff 50%, #ff6b35 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tagline-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.tagline-row .pill { font-size: 12px; padding: 6px 16px; }
+
+/* ── DIVIDER SLIDE ──────────────────────────────────────────── */
+.slide-divider {
+  background: radial-gradient(ellipse at 50% 0%, rgba(124,106,247,.12) 0%, transparent 70%);
+  text-align: center;
+  align-items: center;
+}
+
+.divider-num {
+  font-size: 96px;
+  font-weight: 900;
+  color: var(--primary-a);
+  line-height: 1;
+  letter-spacing: -4px;
+  margin-bottom: -10px;
+  border: none;
+  -webkit-text-stroke: 1px rgba(124,106,247,.2);
+}
+
+.divider-title {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #fff;
+  margin-bottom: 14px;
+}
+
+/* ── AGENDA GRID ────────────────────────────────────────────── */
+.agenda { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+.agenda-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, transform .12s;
+  position: relative;
+  overflow: hidden;
+}
+
+.agenda-item::after {
+  content: '→';
+  position: absolute;
+  right: 12px;
+  font-size: 13px;
+  color: var(--primary);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity .15s, transform .15s;
+}
+
+.agenda-item:hover {
+  background: var(--primary-a);
+  border-color: rgba(124,106,247,.4);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.agenda-item:hover::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.agenda-item:active {
+  transform: translateY(0) scale(.98);
+}
+
+.agenda-item .n {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 22px;
+  transition: transform .15s;
+}
+
+.agenda-item:hover .n {
+  transform: scale(1.15);
+}
+
+/* ── RUN ORDER ──────────────────────────────────────────────── */
+.run-order {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-top: 32px;
+}
+
+.ro-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.ro-circle {
+  width: 70px; height: 70px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.ro-label { font-size: 13px; font-weight: 600; }
+
+.ro-arrow {
+  font-size: 20px;
+  color: var(--dim);
+  margin: 0 8px;
+  padding-bottom: 24px;
+}
+
+.ro-smoke  { border-color: #4ade80; background: rgba(34,197,94,.08);  color: #4ade80; }
+.ro-load   { border-color: #38bdf8; background: rgba(56,189,248,.08); color: #38bdf8; }
+.ro-stress { border-color: #f59e0b; background: rgba(245,158,11,.08); color: #f59e0b; }
+.ro-spike  { border-color: #f87171; background: rgba(248,113,113,.08);color: #f87171; }
+
+/* ── METRICS ROW ────────────────────────────────────────────── */
+.metric-row {
+  display: flex;
+  gap: 12px;
+}
+
+.metric {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  text-align: center;
+}
+
+.metric-val {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -1px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.metric-lbl {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="logo">⚡ k6</span>
+      <span class="section-name" id="section-name">Introduction</span>
+    </div>
+    <span class="slide-counter" id="slide-counter">01 / 25</span>
+  </div>
+
+  <!-- STAGE -->
+  <div class="stage" id="stage">
+
+    <!-- ── 01 TITLE ─────────────────────────────────────────── -->
+    <div class="slide slide-title" data-section="Introduction">
+      <span class="title-icon">⚡</span>
+      <h1 class="gradient-text">k6 Performance<br>Testing</h1>
+      <p class="subtitle">A complete guide for QA engineers and developers</p>
+      <div class="tagline-row">
+        <span class="pill pill-smoke">Smoke</span>
+        <span class="pill pill-load">Load</span>
+        <span class="pill pill-stress">Stress</span>
+        <span class="pill pill-spike">Spike</span>
+      </div>
+    </div>
+
+    <!-- ── 02 AGENDA ──────────────────────────────────────────── -->
+    <div class="slide" data-section="Introduction">
+      <div class="label label-intro">Agenda</div>
+      <h2>What We'll <em>Cover</em></h2>
+      <div class="agenda">
+        <div class="agenda-item" data-target="2"><span class="n">01</span> What is k6</div>
+        <div class="agenda-item" data-target="3"><span class="n">02</span> Why use it</div>
+        <div class="agenda-item" data-target="4"><span class="n">03</span> Installation</div>
+        <div class="agenda-item" data-target="5"><span class="n">04</span> Dummy data sites</div>
+        <div class="agenda-item" data-target="6"><span class="n">05</span> Test structure</div>
+        <div class="agenda-item" data-target="7"><span class="n">06</span> HTTP requests</div>
+        <div class="agenda-item" data-target="9"><span class="n">07</span> Checks & thresholds</div>
+        <div class="agenda-item" data-target="12"><span class="n">08</span> Sleep & stages</div>
+        <div class="agenda-item" data-target="15"><span class="n">09</span> Smoke test</div>
+        <div class="agenda-item" data-target="16"><span class="n">10</span> Load test</div>
+        <div class="agenda-item" data-target="17"><span class="n">11</span> Stress test</div>
+        <div class="agenda-item" data-target="18"><span class="n">12</span> Spike test</div>
+        <div class="agenda-item" data-target="20"><span class="n">13</span> CLI & flags</div>
+        <div class="agenda-item" data-target="22"><span class="n">14</span> Reading results</div>
+        <div class="agenda-item" data-target="23"><span class="n">15</span> Checklist & order</div>
+      </div>
+    </div>
+
+    <!-- ── 03 WHAT IS K6 ─────────────────────────────────────── -->
+    <div class="slide" data-section="Introduction">
+      <div class="label label-intro">Introduction</div>
+      <h2>What is <em>k6</em>?</h2>
+      <p style="margin-bottom:24px;">k6 is an open-source performance testing tool built for developers and QA engineers. You write tests in <strong>JavaScript</strong>, run them from the terminal, and get detailed metrics about how your system behaves under load.</p>
+      <div class="cards cards-3">
+        <div class="card">
+          <span class="card-icon">🟢</span>
+          <h3>Open Source</h3>
+          <p>Free, actively maintained by Grafana Labs with a huge community</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">📝</span>
+          <h3>JavaScript</h3>
+          <p>Write tests in JS — no new language or framework to learn</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">⚙️</span>
+          <h3>CLI First</h3>
+          <p>Runs from terminal, CI pipelines, Docker, or GitHub Actions</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 04 WHY K6 ──────────────────────────────────────────── -->
+    <div class="slide" data-section="Introduction">
+      <div class="label label-intro">Introduction</div>
+      <h2>Why Use <em>k6</em>?</h2>
+      <div class="cols cols-2" style="gap:32px; align-items:center;">
+        <ul>
+          <li><strong>Find problems before users do</strong> — catch slow endpoints and bottlenecks in dev before they reach production</li>
+          <li><strong>Know your limits</strong> — discover exactly how many users your system can handle</li>
+          <li><strong>CI/CD ready</strong> — automatically fails builds when performance degrades</li>
+          <li><strong>Realistic simulation</strong> — virtual users, think time, chained requests</li>
+          <li><strong>Clear metrics</strong> — p95, p99, req/s, error rate all in one summary</li>
+        </ul>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div class="metric"><span class="metric-val">p95</span><span class="metric-lbl">Percentile tracking</span></div>
+          <div class="metric"><span class="metric-val">VUs</span><span class="metric-lbl">Virtual Users</span></div>
+          <div class="metric"><span class="metric-val">0%</span><span class="metric-lbl">Target error rate</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 05 INSTALLATION ────────────────────────────────────── -->
+    <div class="slide" data-section="Setup">
+      <div class="label label-setup">Setup</div>
+      <h2><em>Installation</em></h2>
+      <div class="code-wrap">
+        <div class="code-bar">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">terminal</span>
+        </div>
+        <pre><span class="cm"># Windows — install via winget</span>
+<span class="fn">winget</span> install k6 --source winget
+
+<span class="cm"># macOS — via Homebrew</span>
+<span class="fn">brew</span> install k6
+
+<span class="cm"># Verify the installation</span>
+<span class="fn">k6</span> version</pre>
+      </div>
+      <div class="callout">
+        <strong>No runtime required.</strong> k6 is a single binary — download, install, and you're ready to go. It embeds a JavaScript engine (Goja) so you don't need Node.js.
+      </div>
+    </div>
+
+    <!-- ── 06 DUMMY DATA SITES ────────────────────────────────── -->
+    <div class="slide" data-section="Setup">
+      <div class="label label-setup">Setup</div>
+      <h2>Free <em>Test Sites</em> &amp; Dummy Data</h2>
+      <table>
+        <thead>
+          <tr><th>Site</th><th>Best for</th><th>Credentials</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>dummyjson.com</code></td><td>Full REST API with JWT auth — best for k6</td><td>emilys / emilyspass</td></tr>
+          <tr><td><code>reqres.in</code></td><td>Fake REST API, returns real JSON tokens</td><td>eve.holt@reqres.in / cityslicka</td></tr>
+          <tr><td><code>jsonplaceholder.typicode.com</code></td><td>Read-only fake data (posts, users, todos)</td><td>No auth needed</td></tr>
+          <tr><td><code>fakestoreapi.com</code></td><td>Fake e-commerce with products &amp; cart</td><td>mor_2314 / 83r5^_</td></tr>
+          <tr><td><code>the-internet.herokuapp.com/login</code></td><td>HTML form login page</td><td>tomsmith / SuperSecretPassword!</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 07 TEST STRUCTURE ──────────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2>Basic Test <em>Structure</em></h2>
+      <div class="cols cols-60-40" style="gap:24px;">
+        <div class="code-wrap">
+          <div class="code-bar">
+            <div class="code-dots"><span></span><span></span><span></span></div>
+            <span class="code-filename">my-test.js</span>
+          </div>
+          <pre><span class="kw">import</span> http <span class="kw">from</span> <span class="str">'k6/http'</span>;
+<span class="kw">import</span> { check, sleep } <span class="kw">from</span> <span class="str">'k6'</span>;
+
+<span class="kw">export const</span> <span class="key">options</span> = {
+  <span class="cm">// VUs, duration, thresholds...</span>
+};
+
+<span class="kw">export default function</span> () {
+  <span class="cm">// runs once per VU per iteration</span>
+}</pre>
+        </div>
+        <div>
+          <div class="steps">
+            <div class="step"><div class="step-num">1</div><div class="step-body"><strong>imports</strong><span>Load k6 built-in modules</span></div></div>
+            <div class="step"><div class="step-num">2</div><div class="step-body"><strong>options</strong><span>Configure VUs, duration, thresholds</span></div></div>
+            <div class="step"><div class="step-num">3</div><div class="step-body"><strong>default fn</strong><span>Your test logic — runs in a loop</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 08 HTTP REQUESTS ───────────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2>Making <em>HTTP Requests</em></h2>
+      <div class="code-wrap">
+        <div class="code-bar">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">requests.js</span>
+        </div>
+        <pre><span class="cm">// GET request</span>
+<span class="kw">const</span> res = http.<span class="fn">get</span>(<span class="str">'https://dummyjson.com/users/1'</span>);
+
+<span class="cm">// POST with JSON body + headers</span>
+<span class="kw">const</span> res = http.<span class="fn">post</span>(
+  <span class="str">'https://dummyjson.com/auth/login'</span>,
+  <span class="fn">JSON.stringify</span>({ username: <span class="str">'emilys'</span>, password: <span class="str">'emilyspass'</span> }),
+  { headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> } }
+);
+
+<span class="cm">// GET with Bearer token (authenticated)</span>
+<span class="kw">const</span> res = http.<span class="fn">get</span>(<span class="str">'https://dummyjson.com/auth/me'</span>, {
+  headers: { <span class="str">'Authorization'</span>: <span class="str">`Bearer <span class="kw">${token}</span>`</span> },
+});</pre>
+      </div>
+    </div>
+
+    <!-- ── 09 RESPONSE OBJECT ─────────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2>The <em>Response Object</em></h2>
+      <table>
+        <thead>
+          <tr><th>Property</th><th>Type</th><th>What it contains</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>res.status</code></td><td>number</td><td>HTTP status code — 200, 201, 404, 500...</td></tr>
+          <tr><td><code>res.body</code></td><td>string</td><td>Raw response body as a string</td></tr>
+          <tr><td><code>res.json()</code></td><td>object</td><td>Response body parsed into a JavaScript object</td></tr>
+          <tr><td><code>res.timings.duration</code></td><td>number</td><td>Total request time in milliseconds</td></tr>
+          <tr><td><code>res.headers</code></td><td>object</td><td>All response headers as key-value pairs</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        Always check <strong>res.status</strong> before reading <strong>res.json()</strong> — the body may be empty or an error page on failure.
+      </div>
+    </div>
+
+    <!-- ── 10 CHECKS ─────────────────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2><em>Checks</em> — Assertions</h2>
+      <div class="cols cols-60-40" style="gap:22px;">
+        <div class="code-wrap">
+          <div class="code-bar">
+            <div class="code-dots"><span></span><span></span><span></span></div>
+            <span class="code-filename">checks.js</span>
+          </div>
+          <pre><span class="kw">import</span> { check } <span class="kw">from</span> <span class="str">'k6'</span>;
+
+<span class="fn">check</span>(res, {
+  <span class="str">'status is 200'</span>:      (r) <span class="op">=></span> r.status <span class="op">===</span> <span class="num">200</span>,
+  <span class="str">'has access token'</span>:   (r) <span class="op">=></span> r.<span class="fn">json</span>().accessToken,
+  <span class="str">'response under 500ms'</span>:(r) <span class="op">=></span> r.timings.duration <span class="op">&lt;</span> <span class="num">500</span>,
+  <span class="str">'body not empty'</span>:     (r) <span class="op">=></span> r.body.length <span class="op">></span> <span class="num">0</span>,
+});</pre>
+        </div>
+        <div>
+          <ul>
+            <li><strong>Do not stop the test</strong> — they only record pass/fail counts</li>
+            <li>Returns <strong>true</strong> → pass</li>
+            <li>Returns <strong>false</strong> → fail (still continues)</li>
+            <li>Results appear in the final summary</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 11 THRESHOLDS ─────────────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2><em>Thresholds</em> — Pass / Fail the Whole Test</h2>
+      <div class="code-wrap">
+        <div class="code-bar">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">options — thresholds</span>
+        </div>
+        <pre><span class="kw">export const</span> <span class="key">options</span> = {
+  thresholds: {
+    http_req_failed:   [<span class="str">'rate&lt;0.01'</span>],              <span class="cm">// &lt;1% errors</span>
+    http_req_duration: [<span class="str">'p(95)&lt;500'</span>, <span class="str">'p(99)&lt;1000'</span>], <span class="cm">// speed SLAs</span>
+    checks:            [<span class="str">'rate&gt;0.95'</span>],              <span class="cm">// &gt;95% checks pass</span>
+  },
+};</pre>
+      </div>
+      <div class="callout">
+        A breached threshold makes k6 exit with a <strong>non-zero code</strong> — this automatically fails CI/CD pipelines without any extra configuration.
+      </div>
+    </div>
+
+    <!-- ── 12 THRESHOLD OPERATORS ────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2>Threshold <em>Operators</em></h2>
+      <table>
+        <thead>
+          <tr><th>Operator</th><th>Example</th><th>Meaning</th><th>Use for</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>rate&lt;X</code></td><td><code>'rate&lt;0.01'</code></td><td>Rate below X</td><td>Error rates</td></tr>
+          <tr><td><code>rate&gt;X</code></td><td><code>'rate&gt;0.95'</code></td><td>Rate above X</td><td>Check pass rates</td></tr>
+          <tr><td><code>p(N)&lt;X</code></td><td><code>'p(95)&lt;500'</code></td><td>95th percentile below X ms</td><td>Speed SLAs</td></tr>
+          <tr><td><code>avg&lt;X</code></td><td><code>'avg&lt;200'</code></td><td>Average below X ms</td><td>Mean response time</td></tr>
+          <tr><td><code>max&lt;X</code></td><td><code>'max&lt;2000'</code></td><td>Maximum below X ms</td><td>Worst case limits</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 13 SLEEP & STAGES ──────────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2><em>Sleep</em> &amp; <em>Stages</em></h2>
+      <div class="cols cols-2" style="gap:22px;">
+        <div>
+          <h3 style="margin-bottom:12px;">Sleep — Think Time</h3>
+          <div class="code-wrap">
+            <div class="code-bar"><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre><span class="cm">// Fixed pause</span>
+<span class="fn">sleep</span>(<span class="num">1</span>);
+
+<span class="cm">// Random 0–3s (realistic)</span>
+<span class="fn">sleep</span>(Math.<span class="fn">random</span>() * <span class="num">3</span>);</pre>
+          </div>
+          <p style="font-size:13px; margin-top:10px;">Simulates the time a real user spends reading, thinking, or filling a form between actions.</p>
+        </div>
+        <div>
+          <h3 style="margin-bottom:12px;">Stages — Traffic Shape</h3>
+          <div class="code-wrap">
+            <div class="code-bar"><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre>stages: [
+  { duration: <span class="str">'2m'</span>, target: <span class="num">50</span> }, <span class="cm">// ramp ↑</span>
+  { duration: <span class="str">'5m'</span>, target: <span class="num">50</span> }, <span class="cm">// hold</span>
+  { duration: <span class="str">'2m'</span>, target: <span class="num">0</span>  }, <span class="cm">// ramp ↓</span>
+]</pre>
+          </div>
+          <p style="font-size:13px; margin-top:10px;"><strong>target</strong> = VUs at end of stage. k6 smoothly ramps between them.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 14 CHAINING REQUESTS ──────────────────────────────── -->
+    <div class="slide" data-section="Core Concepts">
+      <div class="label label-core">Core Concepts</div>
+      <h2>Chaining <em>Requests</em> — Real User Flow</h2>
+      <div class="code-wrap">
+        <div class="code-bar">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">login-flow.js</span>
+        </div>
+        <pre><span class="kw">export default function</span> () {
+  <span class="cm">// 1 — Login and get token</span>
+  <span class="kw">const</span> loginRes = http.<span class="fn">post</span>(<span class="str">'/auth/login'</span>, payload, params);
+  <span class="fn">check</span>(loginRes, { <span class="str">'logged in'</span>: (r) <span class="op">=></span> r.status <span class="op">===</span> <span class="num">200</span> });
+
+  <span class="cm">// 2 — Extract token from response</span>
+  <span class="kw">const</span> token = loginRes.<span class="fn">json</span>().accessToken;
+  <span class="fn">sleep</span>(<span class="num">1</span>);                      <span class="cm">// user pauses</span>
+
+  <span class="cm">// 3 — Use token in next request</span>
+  <span class="kw">const</span> res = http.<span class="fn">get</span>(<span class="str">'/auth/me'</span>, {
+    headers: { <span class="str">'Authorization'</span>: <span class="str">`Bearer <span class="kw">${token}</span>`</span> },
+  });
+  <span class="fn">check</span>(res, { <span class="str">'got profile'</span>: (r) <span class="op">=></span> r.status <span class="op">===</span> <span class="num">200</span> });
+}</pre>
+      </div>
+    </div>
+
+    <!-- ── 15 DIVIDER ────────────────────────────────────────── -->
+    <div class="slide slide-divider" data-section="Test Types">
+      <div class="divider-num">4</div>
+      <div class="divider-title">Test Types</div>
+      <div class="tagline-row">
+        <span class="pill pill-smoke">Smoke</span>
+        <span class="pill pill-load">Load</span>
+        <span class="pill pill-stress">Stress</span>
+        <span class="pill pill-spike">Spike</span>
+      </div>
+      <p style="margin-top:20px; color:var(--muted); font-size:14px;">Each test type answers a different question about your system</p>
+    </div>
+
+    <!-- ── 16 SMOKE ───────────────────────────────────────────── -->
+    <div class="slide" data-section="Test Types">
+      <div class="label label-types"><span class="pill pill-smoke">Smoke</span></div>
+      <h2>Smoke Test — <em>Sanity Check</em></h2>
+      <div class="cols cols-40-60" style="gap:22px;">
+        <div>
+          <ul style="gap:10px; margin-bottom:16px;">
+            <li><strong>1 virtual user</strong></li>
+            <li><strong>30 seconds</strong> duration</li>
+            <li>Strict thresholds</li>
+            <li>All checks must pass</li>
+            <li>Run <strong>first</strong>, always</li>
+          </ul>
+          <div class="vu-chart">
+            <div class="vu-seg"><div class="vu-bar bar-smoke" style="height:40px;"></div><div class="vu-lbl">1 VU / 30s</div></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-bar"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">smoke.test.js</span></div>
+          <pre><span class="kw">export const</span> <span class="key">options</span> = {
+  vus: <span class="num">1</span>,
+  duration: <span class="str">'30s'</span>,
+  thresholds: {
+    http_req_failed:
+      [<span class="str">'rate&lt;0.01'</span>],
+    http_req_duration:
+      [<span class="str">'p(95)&lt;500'</span>],
+  },
+};</pre>
+        </div>
+      </div>
+      <div class="callout">
+        <strong>If smoke fails — stop.</strong> Fix the issue before running any other test type.
+      </div>
+    </div>
+
+    <!-- ── 17 LOAD ────────────────────────────────────────────── -->
+    <div class="slide" data-section="Test Types">
+      <div class="label label-types"><span class="pill pill-load">Load</span></div>
+      <h2>Load Test — <em>Normal Traffic</em></h2>
+      <div class="cols cols-40-60" style="gap:22px;">
+        <div>
+          <ul style="gap:10px; margin-bottom:16px;">
+            <li><strong>25–50 virtual users</strong></li>
+            <li><strong>15–20 minutes</strong> total</li>
+            <li>Ramp up → hold → ramp down</li>
+            <li>Test full user flows</li>
+            <li>Your baseline health check</li>
+          </ul>
+          <div class="vu-chart">
+            <div class="vu-seg"><div class="vu-bar bar-load" style="height:30px;"></div><div class="vu-lbl">2m ramp</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-load" style="height:30px;"></div><div class="vu-lbl">5m hold</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-load" style="height:55px;"></div><div class="vu-lbl">2m ramp</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-load" style="height:55px;"></div><div class="vu-lbl">5m hold</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-load" style="height:8px;"></div><div class="vu-lbl">2m down</div></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-bar"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">load.test.js</span></div>
+          <pre><span class="kw">export const</span> <span class="key">options</span> = {
+  stages: [
+    { duration: <span class="str">'2m'</span>, target: <span class="num">25</span> },
+    { duration: <span class="str">'5m'</span>, target: <span class="num">25</span> },
+    { duration: <span class="str">'2m'</span>, target: <span class="num">50</span> },
+    { duration: <span class="str">'5m'</span>, target: <span class="num">50</span> },
+    { duration: <span class="str">'2m'</span>, target: <span class="num">0</span>  },
+  ],
+  thresholds: {
+    http_req_failed:
+      [<span class="str">'rate&lt;0.05'</span>],
+    http_req_duration:
+      [<span class="str">'p(95)&lt;1000'</span>],
+  },
+};</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 18 STRESS ──────────────────────────────────────────── -->
+    <div class="slide" data-section="Test Types">
+      <div class="label label-types"><span class="pill pill-stress">Stress</span></div>
+      <h2>Stress Test — <em>Find the Breaking Point</em></h2>
+      <div class="cols cols-40-60" style="gap:22px;">
+        <div>
+          <ul style="gap:10px; margin-bottom:16px;">
+            <li><strong>50–300+ virtual users</strong></li>
+            <li><strong>25–35 minutes</strong> total</li>
+            <li>Continuously increasing load</li>
+            <li>Watch for 429 and 503 errors</li>
+            <li>Recovery stage at the end</li>
+          </ul>
+          <div class="vu-chart">
+            <div class="vu-seg"><div class="vu-bar bar-stress" style="height:16px;"></div><div class="vu-lbl">50</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-stress" style="height:26px;"></div><div class="vu-lbl">100</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-stress" style="height:38px;"></div><div class="vu-lbl">150</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-stress" style="height:50px;"></div><div class="vu-lbl">200</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-stress" style="height:62px;"></div><div class="vu-lbl">300</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-stress" style="height:6px;"></div><div class="vu-lbl">recover</div></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-bar"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">stress.test.js</span></div>
+          <pre><span class="kw">export const</span> <span class="key">options</span> = {
+  stages: [
+    { duration: <span class="str">'2m'</span>, target: <span class="num">50</span>  },
+    { duration: <span class="str">'5m'</span>, target: <span class="num">100</span> },
+    { duration: <span class="str">'5m'</span>, target: <span class="num">200</span> },
+    { duration: <span class="str">'5m'</span>, target: <span class="num">300</span> },
+    { duration: <span class="str">'5m'</span>, target: <span class="num">0</span>   },
+  ],
+  thresholds: {
+    http_req_failed:
+      [<span class="str">'rate&lt;0.10'</span>],
+    http_req_duration:
+      [<span class="str">'p(95)&lt;3000'</span>],
+  },
+};</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 19 SPIKE ───────────────────────────────────────────── -->
+    <div class="slide" data-section="Test Types">
+      <div class="label label-types"><span class="pill pill-spike">Spike</span></div>
+      <h2>Spike Test — <em>Sudden Bursts</em></h2>
+      <div class="cols cols-40-60" style="gap:22px;">
+        <div>
+          <ul style="gap:10px; margin-bottom:16px;">
+            <li><strong>5 → 200 → 5 VUs</strong></li>
+            <li><strong>8–10 minutes</strong> total</li>
+            <li>Instant ramp up in 30 seconds</li>
+            <li>Instant drop back down</li>
+            <li>Watch recovery time</li>
+          </ul>
+          <div class="vu-chart">
+            <div class="vu-seg"><div class="vu-bar bar-spike" style="height:6px;"></div><div class="vu-lbl">5</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-spike" style="height:65px;"></div><div class="vu-lbl">↑200</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-spike" style="height:65px;"></div><div class="vu-lbl">hold</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-spike" style="height:6px;"></div><div class="vu-lbl">↓5</div></div>
+            <div class="vu-seg"><div class="vu-bar bar-spike" style="height:6px;"></div><div class="vu-lbl">recover</div></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-bar"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">spike.test.js</span></div>
+          <pre><span class="kw">export const</span> <span class="key">options</span> = {
+  stages: [
+    { duration: <span class="str">'1m'</span>,  target: <span class="num">5</span>   },
+    { duration: <span class="str">'30s'</span>, target: <span class="num">200</span> },
+    { duration: <span class="str">'3m'</span>,  target: <span class="num">200</span> },
+    { duration: <span class="str">'30s'</span>, target: <span class="num">5</span>   },
+    { duration: <span class="str">'3m'</span>,  target: <span class="num">5</span>   },
+  ],
+  thresholds: {
+    http_req_failed:
+      [<span class="str">'rate&lt;0.15'</span>],
+    http_req_duration:
+      [<span class="str">'p(95)&lt;5000'</span>],
+  },
+};</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 20 COMPARISON ─────────────────────────────────────── -->
+    <div class="slide" data-section="Test Types">
+      <div class="label label-types">Test Types</div>
+      <h2>All Four Types — <em>Side by Side</em></h2>
+      <table>
+        <thead>
+          <tr><th>Type</th><th>VUs</th><th>Duration</th><th>Error limit</th><th>p95 limit</th><th>Goal</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pill pill-smoke">Smoke</span></td>
+            <td>1</td><td>30s</td><td>&lt;1%</td><td>&lt;500ms</td><td>Basic sanity check</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-load">Load</span></td>
+            <td>25–50</td><td>15–20m</td><td>&lt;5%</td><td>&lt;1000ms</td><td>Normal &amp; peak traffic</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-stress">Stress</span></td>
+            <td>50–300+</td><td>25–35m</td><td>&lt;10%</td><td>&lt;3000ms</td><td>Find breaking point</td>
+          </tr>
+          <tr>
+            <td><span class="pill pill-spike">Spike</span></td>
+            <td>5→200→5</td><td>8–10m</td><td>&lt;15%</td><td>&lt;5000ms</td><td>Sudden traffic bursts</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 21 CLI COMMANDS ───────────────────────────────────── -->
+    <div class="slide" data-section="Running Tests">
+      <div class="label label-run">Running Tests</div>
+      <h2>CLI <em>Commands</em></h2>
+      <div class="code-wrap">
+        <div class="code-bar">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">terminal</span>
+        </div>
+        <pre><span class="cm"># Run a test</span>
+<span class="fn">k6</span> run smoke.test.js
+
+<span class="cm"># Override VUs and duration from CLI</span>
+<span class="fn">k6</span> run --vus <span class="num">10</span> --duration <span class="num">60</span>s smoke.test.js
+
+<span class="cm"># Run exact number of iterations</span>
+<span class="fn">k6</span> run --vus <span class="num">5</span> --iterations <span class="num">50</span> smoke.test.js
+
+<span class="cm"># Save results to JSON / CSV</span>
+<span class="fn">k6</span> run --out json=results/smoke.json smoke.test.js
+<span class="fn">k6</span> run --out csv=results/load.csv  load.test.js</pre>
+      </div>
+    </div>
+
+    <!-- ── 22 FLAGS ──────────────────────────────────────────── -->
+    <div class="slide" data-section="Running Tests">
+      <div class="label label-run">Running Tests</div>
+      <h2>Useful <em>Flags</em></h2>
+      <table>
+        <thead>
+          <tr><th>Flag</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>--vus 20</code></td><td>Override number of virtual users</td></tr>
+          <tr><td><code>--duration 2m</code></td><td>Override test duration</td></tr>
+          <tr><td><code>--iterations 100</code></td><td>Run exactly N iterations in total</td></tr>
+          <tr><td><code>--out json=file.json</code></td><td>Export all metrics to a JSON file</td></tr>
+          <tr><td><code>--quiet</code></td><td>Show only the final summary — no progress bar</td></tr>
+          <tr><td><code>--http-debug</code></td><td>Print full HTTP request and response details</td></tr>
+          <tr><td><code>--no-color</code></td><td>Plain text output — useful for CI log files</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 23 READING RESULTS ─────────────────────────────────── -->
+    <div class="slide" data-section="Running Tests">
+      <div class="label label-run">Running Tests</div>
+      <h2>Reading <em>Output Metrics</em></h2>
+      <table>
+        <thead>
+          <tr><th>Metric</th><th>What it tells you</th><th>Target</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>checks_succeeded</code></td><td>Percentage of assertions that passed</td><td>100%</td></tr>
+          <tr><td><code>http_req_failed</code></td><td>Percentage of requests that errored</td><td>&lt;1%</td></tr>
+          <tr><td><code>http_req_duration avg</code></td><td>Average response time across all requests</td><td>&lt;500ms</td></tr>
+          <tr><td><code>http_req_duration p(95)</code></td><td>95% of requests finished faster than this</td><td>&lt;1000ms</td></tr>
+          <tr><td><code>http_req_duration max</code></td><td>The single slowest request</td><td>&lt;2000ms</td></tr>
+          <tr><td><code>http_reqs/s</code></td><td>Throughput — requests per second</td><td>As high as possible</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 24 CHECKLIST ──────────────────────────────────────── -->
+    <div class="slide" data-section="Wrap Up">
+      <div class="label label-intro">Wrap Up</div>
+      <h2>Writing <em>Checklist</em></h2>
+      <div class="cols cols-2" style="gap:20px;">
+        <div class="checklist">
+          <div class="chk"><div class="chk-box">✓</div><span>What URL am I testing?</span></div>
+          <div class="chk"><div class="chk-box">✓</div><span>What HTTP method? (GET / POST / PUT)</span></div>
+          <div class="chk"><div class="chk-box">✓</div><span>Do I need headers or a body?</span></div>
+          <div class="chk"><div class="chk-box">✓</div><span>What does a good response look like? → checks</span></div>
+        </div>
+        <div class="checklist">
+          <div class="chk"><div class="chk-box">✓</div><span>Set pass/fail thresholds</span></div>
+          <div class="chk"><div class="chk-box">✓</div><span>Choose the right test shape (VUs / stages)</span></div>
+          <div class="chk"><div class="chk-box">✓</div><span>Chain requests if needed (login → action)</span></div>
+          <div class="chk"><div class="chk-box">✓</div><span>Add sleep() to simulate real user pauses</span></div>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:20px;">
+        <strong>Start simple.</strong> Write the minimal template first — 1 VU, 10s, 1 request — confirm it passes, then expand from there.
+      </div>
+    </div>
+
+    <!-- ── 25 RUN ORDER ──────────────────────────────────────── -->
+    <div class="slide slide-title" data-section="Wrap Up">
+      <h2 style="text-align:center; margin-bottom:10px;">Recommended <em>Run Order</em></h2>
+      <p style="text-align:center; color:var(--muted); margin-bottom:28px; font-size:14px;">If any step fails — stop, fix the issue, restart from Smoke</p>
+      <div class="run-order">
+        <div class="ro-item">
+          <div class="ro-circle ro-smoke">🔍</div>
+          <span class="ro-label" style="color:#4ade80;">Smoke</span>
+        </div>
+        <div class="ro-arrow">→</div>
+        <div class="ro-item">
+          <div class="ro-circle ro-load">📈</div>
+          <span class="ro-label" style="color:#38bdf8;">Load</span>
+        </div>
+        <div class="ro-arrow">→</div>
+        <div class="ro-item">
+          <div class="ro-circle ro-stress">💪</div>
+          <span class="ro-label" style="color:#f59e0b;">Stress</span>
+        </div>
+        <div class="ro-arrow">→</div>
+        <div class="ro-item">
+          <div class="ro-circle ro-spike">⚡</div>
+          <span class="ro-label" style="color:#f87171;">Spike</span>
+        </div>
+      </div>
+      <p style="text-align:center; color:var(--dim); margin-top:32px; font-size:13px;">
+        k6 Performance Testing Guide &nbsp;·&nbsp; dummyjson.com for practice &nbsp;·&nbsp; k6 run &lt;file&gt; to run
+      </p>
+    </div>
+
+  </div><!-- /stage -->
+
+  <!-- BOTTOM BAR -->
+  <div class="bottombar">
+    <div class="nav-btns">
+      <button class="btn btn-home" id="btnHome" title="Back to start (Home)">⌂</button>
+      <button class="btn" id="btnPrev" disabled>← Prev</button>
+    </div>
+    <div class="dots" id="dots"></div>
+    <div class="nav-btns">
+      <button class="btn" id="btnNext">Next →</button>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var slides  = Array.from(document.querySelectorAll('.slide'));
+  var dotsEl  = document.getElementById('dots');
+  var stage   = document.getElementById('stage');
+  var counter = document.getElementById('slide-counter');
+  var section = document.getElementById('section-name');
+  var btnHome = document.getElementById('btnHome');
+  var btnPrev = document.getElementById('btnPrev');
+  var btnNext = document.getElementById('btnNext');
+  var total   = slides.length;
+  var current = 0;
+
+  // Build dot indicators
+  slides.forEach(function (_, i) {
+    var d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', function () { goTo(i); });
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(n) {
+    n = Math.max(0, Math.min(n, total - 1));
+
+    // Remove active from current slide
+    slides[current].classList.remove('active');
+    slides[current].classList.add('exit');
+    var leaving = current;
+    setTimeout(function () {
+      slides[leaving].classList.remove('exit');
+    }, 220);
+
+    current = n;
+
+    // Activate new slide
+    slides[current].classList.add('active');
+
+    // Sync dots
+    var dots = dotsEl.querySelectorAll('.dot');
+    dots.forEach(function (d, i) {
+      d.classList.toggle('active', i === current);
+    });
+
+    // Sync topbar
+    counter.textContent = pad(current + 1) + ' / ' + pad(total);
+    section.textContent = slides[current].getAttribute('data-section') || '';
+
+    // Sync progress bar
+    stage.style.setProperty('--progress', ((current + 1) / total * 100) + '%');
+
+    // Sync buttons
+    btnHome.disabled = current === 0;
+    btnPrev.disabled = current === 0;
+    btnNext.disabled = current === total - 1;
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // Button clicks
+  btnHome.addEventListener('click', function () { goTo(0); });
+  btnPrev.addEventListener('click', function () { goTo(current - 1); });
+  btnNext.addEventListener('click', function () { goTo(current + 1); });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+    if (e.key === 'Home')                                 goTo(0);
+    if (e.key === 'End')                                  goTo(total - 1);
+    if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        document.documentElement.requestFullscreen();
+      }
+    }
+  });
+
+  // Agenda item clicks
+  document.querySelectorAll('.agenda-item[data-target]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      goTo(parseInt(el.getAttribute('data-target'), 10));
+    });
+  });
+
+  // Set initial state
+  slides[0].classList.add('active');
+  btnHome.disabled = true;
+  btnPrev.disabled = true;
+  stage.style.setProperty('--progress', (1 / total * 100) + '%');
+  counter.textContent = '01 / ' + pad(total);
+  section.textContent = slides[0].getAttribute('data-section') || '';
+});
+</script>
+</body>
+</html>
