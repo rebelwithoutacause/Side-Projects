@@ -409,7 +409,6 @@ header h1 {
     border-radius: 0;
     padding: 30px;
     box-shadow: var(--shadow-lg);
-    min-height: 400px;
     position: relative;
 }
 
@@ -456,7 +455,24 @@ header h1 {
 }
 
 .email-list {
-    min-height: 300px;
+    height: 300px;
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) #000;
+}
+
+.email-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.email-list::-webkit-scrollbar-track {
+    background: #000;
+}
+
+.email-list::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    box-shadow: 0 0 6px rgba(0, 255, 65, 0.6);
 }
 
 .empty-inbox {
@@ -464,14 +480,14 @@ header h1 {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px 20px;
+    padding: 30px 20px;
     color: var(--text-muted);
     text-align: center;
     background-image: url('anon_.jpg');
     background-size: contain;
     background-position: center center;
     background-repeat: no-repeat;
-    min-height: 400px;
+    height: 100%;
     position: relative;
 }
 
