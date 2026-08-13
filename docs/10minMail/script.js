@@ -1,7 +1,9 @@
 // Configuration
-const API_BASE = 'https://www.1secmail.com/api/v1/';
+const API_BASE = 'https://api.mail.gw';
 let currentEmail = '';
 let currentDomain = '';
+let currentPassword = '';
+let authToken = '';
 let timerInterval = null;
 let expirationTime = null;
 let checkEmailsInterval = null;
@@ -51,25 +53,54 @@ function setupEventListeners() {
 
 // Generate random email
 async function generateNewEmail() {
+    authToken = '';
+
     try {
-        // Generate random username
-        const username = generateRandomString(10);
-
         // Get available domains
-        const response = await fetch(`${API_BASE}?action=getDomainList`);
+        const domainsResponse = await fetch(`${API_BASE}/domains`);
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (!domainsResponse.ok) {
+            throw new Error(`HTTP error! status: ${domainsResponse.status}`);
         }
 
-        const domains = await response.json();
+        const domainsData = await domainsResponse.json();
+        const domains = (domainsData['hydra:member'] || [])
+            .filter(d => d.isActive)
+            .map(d => d.domain);
 
         if (!domains || domains.length === 0) {
             throw new Error('No domains available');
         }
 
+        const username = generateRandomString(10);
         currentDomain = domains[Math.floor(Math.random() * domains.length)];
         currentEmail = `${username}@${currentDomain}`;
+        currentPassword = generateRandomString(20);
+
+        // Register the mailbox
+        const accountResponse = await fetch(`${API_BASE}/accounts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: currentEmail, password: currentPassword })
+        });
+
+        if (!accountResponse.ok) {
+            throw new Error(`Account creation failed! status: ${accountResponse.status}`);
+        }
+
+        // Log in to get an access token for reading the inbox
+        const tokenResponse = await fetch(`${API_BASE}/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: currentEmail, password: currentPassword })
+        });
+
+        if (!tokenResponse.ok) {
+            throw new Error(`Login failed! status: ${tokenResponse.status}`);
+        }
+
+        const tokenData = await tokenResponse.json();
+        authToken = tokenData.token;
 
         document.getElementById('emailAddress').value = currentEmail;
 
@@ -87,13 +118,11 @@ async function generateNewEmail() {
         `;
     } catch (error) {
         console.error('Error generating email:', error);
-        showNotification('Error generating email. Try running from a web server or check console.', 'error');
+        showNotification('Error generating email. Check console for details.', 'error');
 
-        // Fallback: generate email without API
+        // Fallback: show a placeholder address (inbox checks are skipped without a token)
         const username = generateRandomString(10);
-        const fallbackDomains = ['1secmail.com', '1secmail.org', '1secmail.net'];
-        currentDomain = fallbackDomains[Math.floor(Math.random() * fallbackDomains.length)];
-        currentEmail = `${username}@${currentDomain}`;
+        currentEmail = `${username}@unavailable.invalid`;
         document.getElementById('emailAddress').value = currentEmail;
     }
 }
@@ -163,15 +192,24 @@ async function copyEmail() {
 
 // Check for emails
 async function checkEmails() {
-    if (!currentEmail) return;
-
-    const [username, domain] = currentEmail.split('@');
+    if (!currentEmail || !authToken) return;
 
     try {
-        const response = await fetch(
-            `${API_BASE}?action=getMessages&login=${username}&domain=${domain}`
-        );
-        const emails = await response.json();
+        const response = await fetch(`${API_BASE}/messages`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const emails = (data['hydra:member'] || []).map(m => ({
+            id: m.id,
+            from: (m.from && m.from.address) || 'unknown sender',
+            subject: m.subject,
+            date: m.createdAt
+        }));
 
         if (emails && emails.length > 0) {
             displayEmails(emails);
@@ -206,24 +244,29 @@ function displayEmails(emails) {
 }
 
 async function openEmail(emailId) {
-    if (!currentEmail) return;
-
-    const [username, domain] = currentEmail.split('@');
+    if (!currentEmail || !authToken) return;
 
     try {
-        const response = await fetch(
-            `${API_BASE}?action=readMessage&login=${username}&domain=${domain}&id=${emailId}`
-        );
+        const response = await fetch(`${API_BASE}/messages/${emailId}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const email = await response.json();
+        const fromAddress = (email.from && email.from.address) || 'unknown sender';
+        const htmlBody = Array.isArray(email.html) ? email.html.join('') : email.html;
 
         document.getElementById('modalSubject').textContent = email.subject || '(No Subject)';
-        document.getElementById('modalFrom').textContent = email.from;
-        document.getElementById('modalDate').textContent = formatDate(email.date);
+        document.getElementById('modalFrom').textContent = fromAddress;
+        document.getElementById('modalDate').textContent = formatDate(email.createdAt);
 
         // Display email body (prefer HTML, fallback to text)
-        const bodyContent = email.htmlBody || email.textBody || 'No content';
-        document.getElementById('modalBody').innerHTML = email.htmlBody
-            ? sanitizeHtml(email.htmlBody)
+        const bodyContent = htmlBody || email.text || 'No content';
+        document.getElementById('modalBody').innerHTML = htmlBody
+            ? sanitizeHtml(htmlBody)
             : `<pre>${escapeHtml(bodyContent)}</pre>`;
 
         document.getElementById('emailModal').style.display = 'flex';

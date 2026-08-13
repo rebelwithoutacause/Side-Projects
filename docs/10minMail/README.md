@@ -42,7 +42,7 @@ Then open: http://localhost:8000
 ## Technical Stack
 
 - Pure HTML5, CSS3, JavaScript (ES6+)
-- 1secmail.com API
+- mail.gw API
 - Python/Node.js local server
 - No backend or database required
 
@@ -80,11 +80,12 @@ See `TROUBLESHOOTING.md` for detailed help.
 
 Created by **rebelwithoutacause**
 - GitHub: [@rebelwithoutacause](https://github.com/rebelwithoutacause)
-- Repository: [Side-Projects/10minMail](https://github.com/rebelwithoutacause/Side-Projects/tree/main/10minMail)
+- Repository: [Side-Projects/docs/10minMail](https://github.com/rebelwithoutacause/Side-Projects/tree/main/docs/10minMail)
+- Live app: [rebelwithoutacause.github.io/Side-Projects/10minMail](https://rebelwithoutacause.github.io/Side-Projects/10minMail/)
 
 ## Credits
 
-- **API Service**: 1secmail.com
+- **API Service**: mail.gw
 - **Design Inspiration**: Retro terminal aesthetics
 
 ## License
