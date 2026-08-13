@@ -1,5 +1,11 @@
 // Configuration
 const API_BASE = 'https://api.mail.gw';
+const BOOT_LINES = [
+    '> booting secure_mail_protocol...',
+    '> establishing anonymous connection...',
+    '> generating disposable identity...',
+    '> ready.'
+];
 let currentEmail = '';
 let currentDomain = '';
 let currentPassword = '';
@@ -8,17 +14,72 @@ let timerInterval = null;
 let expirationTime = null;
 let checkEmailsInterval = null;
 let selectedDuration = 10; // Default 10 minutes
+let seenEmailIds = new Set();
+let readEmailIds = new Set();
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
     setupEventListeners();
+    Promise.all([playBootSequence(), initializeApp()]).then(hideBootScreen);
 });
 
 async function initializeApp() {
     await generateNewEmail();
     startTimer(selectedDuration);
     startEmailChecking();
+}
+
+// Type out the boot lines, then resolve once the sequence has finished
+function playBootSequence() {
+    const bootTextEl = document.getElementById('bootText');
+    if (!bootTextEl) return Promise.resolve();
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    return new Promise(resolve => {
+        if (reduced) {
+            bootTextEl.textContent = BOOT_LINES.join('\n');
+            setTimeout(resolve, 400);
+            return;
+        }
+
+        let lineIndex = 0;
+        let charIndex = 0;
+        let display = '';
+
+        function typeNext() {
+            if (lineIndex >= BOOT_LINES.length) {
+                setTimeout(resolve, 500);
+                return;
+            }
+
+            const line = BOOT_LINES[lineIndex];
+
+            if (charIndex < line.length) {
+                display += line[charIndex];
+                bootTextEl.textContent = display;
+                charIndex++;
+                setTimeout(typeNext, 18 + Math.random() * 22);
+            } else {
+                display += '\n';
+                lineIndex++;
+                charIndex = 0;
+                setTimeout(typeNext, 220);
+            }
+        }
+
+        typeNext();
+    });
+}
+
+function hideBootScreen() {
+    const bootScreenEl = document.getElementById('bootScreen');
+    if (!bootScreenEl) return;
+
+    bootScreenEl.classList.add('boot-hidden');
+    setTimeout(() => {
+        bootScreenEl.style.display = 'none';
+    }, 500);
 }
 
 function setupEventListeners() {
@@ -105,6 +166,10 @@ async function generateNewEmail() {
         document.getElementById('emailAddress').value = currentEmail;
 
         showNotification('New email address generated!', 'success');
+
+        // Reset inbox tracking for the new mailbox
+        seenEmailIds = new Set();
+        readEmailIds = new Set();
 
         // Clear inbox
         document.getElementById('emailList').innerHTML = `
@@ -224,20 +289,34 @@ function displayEmails(emails) {
 
     if (emails.length === 0) return;
 
-    emailList.innerHTML = emails.map(email => `
-        <div class="email-item" data-id="${email.id}">
+    // Track which of these messages weren't in the inbox on the last check
+    const arrivedIds = new Set(
+        emails.map(email => email.id).filter(id => !seenEmailIds.has(id))
+    );
+    arrivedIds.forEach(id => seenEmailIds.add(id));
+
+    emailList.innerHTML = emails.map(email => {
+        const classes = ['email-item'];
+        if (arrivedIds.has(email.id)) classes.push('email-item--new');
+        if (!readEmailIds.has(email.id)) classes.push('email-item--unread');
+
+        return `
+        <div class="${classes.join(' ')}" data-id="${email.id}">
             <div class="email-header">
                 <strong>${escapeHtml(email.from)}</strong>
                 <span class="email-date">${formatDate(email.date)}</span>
             </div>
             <div class="email-subject">${escapeHtml(email.subject) || '(No Subject)'}</div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     // Add click listeners
     emailList.querySelectorAll('.email-item').forEach(item => {
         item.addEventListener('click', () => {
             const emailId = item.dataset.id;
+            readEmailIds.add(emailId);
+            item.classList.remove('email-item--unread', 'email-item--new');
             openEmail(emailId);
         });
     });

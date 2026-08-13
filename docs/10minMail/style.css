@@ -90,6 +90,54 @@ body::after {
     margin: 0 auto;
 }
 
+/* Boot sequence */
+.boot-screen {
+    position: fixed;
+    inset: 0;
+    background: #0a0a0a;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10001;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.boot-screen.boot-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.boot-text {
+    white-space: pre-wrap;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1rem;
+    line-height: 1.9;
+    max-width: 560px;
+    text-shadow: var(--glow);
+    letter-spacing: 0.5px;
+}
+
+.boot-cursor {
+    display: inline-block;
+    font-family: 'Courier New', Courier, monospace;
+    color: var(--primary-color);
+    text-shadow: var(--glow);
+    animation: blinkCursor 0.8s steps(1) infinite;
+}
+
+@keyframes blinkCursor {
+    50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boot-cursor {
+        animation: none;
+    }
+}
+
 /* Header */
 header {
     text-align: center;
@@ -495,6 +543,49 @@ header h1 {
 
 .email-item:hover::before {
     opacity: 1;
+}
+
+.email-item--unread {
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.35);
+}
+
+.email-item--unread::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--secondary-color);
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.9);
+}
+
+.email-item--new {
+    animation: mailArrive 1.6s ease-out;
+}
+
+@keyframes mailArrive {
+    0% {
+        border-color: var(--secondary-color);
+        box-shadow: 0 0 30px rgba(0, 212, 255, 0.9);
+    }
+    12% { transform: translateX(-5px); }
+    24% { transform: translateX(5px); }
+    36% { transform: translateX(-3px); }
+    48% { transform: translateX(3px); }
+    60% { transform: translateX(0); }
+    100% {
+        border-color: var(--secondary-color);
+        box-shadow: 0 0 15px rgba(0, 212, 255, 0.35);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .email-item--new {
+        animation: none;
+    }
 }
 
 .email-header {
