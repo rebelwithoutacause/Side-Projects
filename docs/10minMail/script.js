@@ -1,7 +1,9 @@
 // Configuration
-// mail.gw and mail.tm are the same underlying service (identical API), so mail.tm
-// works as a drop-in fallback when mail.gw is down (or vice versa).
-const PROVIDERS = ['https://api.mail.gw', 'https://api.mail.tm'];
+const API_BASE = 'https://api.mail.gw';
+// Fallback provider used when mail.gw is unreachable. Guerrilla Mail's API sends
+// Access-Control-Allow-Origin: * (verified), unlike some other "public" temp-mail
+// APIs which look reachable with curl but silently block browser fetches via CORS.
+const FALLBACK_API_BASE = 'https://api.guerrillamail.com/ajax.php';
 const BOOT_LINES = [
     '> booting secure_mail_protocol...',
     '> establishing anonymous connection...',
@@ -12,7 +14,8 @@ let currentEmail = '';
 let currentDomain = '';
 let currentPassword = '';
 let authToken = '';
-let API_BASE = PROVIDERS[0];
+let currentProvider = 'mailgw'; // 'mailgw' or 'guerrilla'
+let sidToken = ''; // guerrilla mail session token
 let timerInterval = null;
 let expirationTime = null;
 let checkEmailsInterval = null;
@@ -115,40 +118,38 @@ function setupEventListeners() {
     });
 }
 
-// Generate random email. Tries each provider in PROVIDERS in order, falling
-// back to the next one if the current one is down (e.g. mail.gw returning
-// 502s falls back to mail.tm, which exposes the identical API).
+// Generate random email
 async function generateNewEmail() {
     authToken = '';
+    sidToken = '';
 
-    for (const base of PROVIDERS) {
-        if (await tryGenerateEmail(base)) {
-            if (base !== PROVIDERS[0]) {
-                console.warn(`${PROVIDERS[0]} unavailable, fell back to ${base}`);
-            }
-            API_BASE = base;
-            document.getElementById('emailAddress').value = currentEmail;
-            showNotification('New email address generated!', 'success');
-            resetInboxUi();
-            return;
-        }
+    if (await generateNewEmailViaMailGw()) {
+        currentProvider = 'mailgw';
+    } else if (await generateNewEmailViaGuerrilla()) {
+        currentProvider = 'guerrilla';
+        console.warn('mail.gw unavailable, fell back to Guerrilla Mail');
+    } else {
+        console.error('Error generating email: all providers unavailable');
+        showNotification('Error generating email. Check console for details.', 'error');
+
+        // Last resort: show a placeholder address (inbox checks are skipped without a live provider)
+        currentProvider = 'none';
+        const username = generateRandomString(10);
+        currentEmail = `${username}@unavailable.invalid`;
+        document.getElementById('emailAddress').value = currentEmail;
+        return;
     }
 
-    console.error('Error generating email: all providers unavailable');
-    showNotification('Error generating email. Check console for details.', 'error');
-
-    // Last resort: show a placeholder address (inbox checks are skipped without a token)
-    const username = generateRandomString(10);
-    currentEmail = `${username}@unavailable.invalid`;
     document.getElementById('emailAddress').value = currentEmail;
+    showNotification('New email address generated!', 'success');
+    resetInboxUi();
 }
 
-// Attempts the mail.gw/mail.tm-style signup flow against the given API base.
-// Returns true on success, false if this provider should be skipped.
-async function tryGenerateEmail(base) {
+// Primary provider: mail.gw. Returns true on success, false if it should fall back.
+async function generateNewEmailViaMailGw() {
     try {
         // Get available domains
-        const domainsResponse = await fetch(`${base}/domains`);
+        const domainsResponse = await fetch(`${API_BASE}/domains`);
 
         if (!domainsResponse.ok) {
             throw new Error(`HTTP error! status: ${domainsResponse.status}`);
@@ -169,7 +170,7 @@ async function tryGenerateEmail(base) {
         currentPassword = generateRandomString(20);
 
         // Register the mailbox
-        const accountResponse = await fetch(`${base}/accounts`, {
+        const accountResponse = await fetch(`${API_BASE}/accounts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address: currentEmail, password: currentPassword })
@@ -180,7 +181,7 @@ async function tryGenerateEmail(base) {
         }
 
         // Log in to get an access token for reading the inbox
-        const tokenResponse = await fetch(`${base}/token`, {
+        const tokenResponse = await fetch(`${API_BASE}/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address: currentEmail, password: currentPassword })
@@ -195,7 +196,34 @@ async function tryGenerateEmail(base) {
 
         return true;
     } catch (error) {
-        console.error(`${base} error generating email:`, error);
+        console.error('mail.gw error generating email:', error);
+        return false;
+    }
+}
+
+// Fallback provider: Guerrilla Mail. No signup/login step - the server assigns
+// an address immediately and hands back a sid_token used for all later requests.
+async function generateNewEmailViaGuerrilla() {
+    try {
+        const response = await fetch(`${FALLBACK_API_BASE}?f=get_email_address`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.email_addr || !data.sid_token) {
+            throw new Error('Invalid response from Guerrilla Mail');
+        }
+
+        currentEmail = data.email_addr;
+        currentDomain = data.email_addr.split('@')[1] || '';
+        sidToken = data.sid_token;
+
+        return true;
+    } catch (error) {
+        console.error('Guerrilla Mail error generating email:', error);
         return false;
     }
 }
@@ -282,24 +310,12 @@ async function copyEmail() {
 
 // Check for emails
 async function checkEmails() {
-    if (!currentEmail || !authToken) return;
+    if (!currentEmail) return;
 
     try {
-        const response = await fetch(`${API_BASE}/messages`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const emails = (data['hydra:member'] || []).map(m => ({
-            id: m.id,
-            from: (m.from && m.from.address) || 'unknown sender',
-            subject: m.subject,
-            date: m.createdAt
-        }));
+        const emails = currentProvider === 'guerrilla'
+            ? await fetchMessagesGuerrilla()
+            : await fetchMessagesMailGw();
 
         if (emails && emails.length > 0) {
             displayEmails(emails);
@@ -307,6 +323,44 @@ async function checkEmails() {
     } catch (error) {
         console.error('Error checking emails:', error);
     }
+}
+
+async function fetchMessagesMailGw() {
+    if (!authToken) return [];
+
+    const response = await fetch(`${API_BASE}/messages`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return (data['hydra:member'] || []).map(m => ({
+        id: m.id,
+        from: (m.from && m.from.address) || 'unknown sender',
+        subject: m.subject,
+        date: m.createdAt
+    }));
+}
+
+async function fetchMessagesGuerrilla() {
+    if (!sidToken) return [];
+
+    const response = await fetch(`${FALLBACK_API_BASE}?f=check_email&seq=0&sid_token=${encodeURIComponent(sidToken)}`);
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return (data.list || []).map(m => ({
+        id: m.mail_id,
+        from: m.mail_from || 'unknown sender',
+        subject: m.mail_subject,
+        date: m.mail_timestamp ? m.mail_timestamp * 1000 : Date.now()
+    }));
 }
 
 function displayEmails(emails) {
@@ -348,29 +402,23 @@ function displayEmails(emails) {
 }
 
 async function openEmail(emailId) {
-    if (!currentEmail || !authToken) return;
+    if (!currentEmail) return;
 
     try {
-        const response = await fetch(`${API_BASE}/messages/${emailId}`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
+        const email = currentProvider === 'guerrilla'
+            ? await fetchMessageGuerrilla(emailId)
+            : await fetchMessageMailGw(emailId);
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const email = await response.json();
-        const fromAddress = (email.from && email.from.address) || 'unknown sender';
-        const htmlBody = Array.isArray(email.html) ? email.html.join('') : email.html;
+        if (!email) return;
 
         document.getElementById('modalSubject').textContent = email.subject || '(No Subject)';
-        document.getElementById('modalFrom').textContent = fromAddress;
-        document.getElementById('modalDate').textContent = formatDate(email.createdAt);
+        document.getElementById('modalFrom').textContent = email.from;
+        document.getElementById('modalDate').textContent = formatDate(email.date);
 
         // Display email body (prefer HTML, fallback to text)
-        const bodyContent = htmlBody || email.text || 'No content';
-        document.getElementById('modalBody').innerHTML = htmlBody
-            ? sanitizeHtml(htmlBody)
+        const bodyContent = email.html || email.text || 'No content';
+        document.getElementById('modalBody').innerHTML = email.html
+            ? sanitizeHtml(email.html)
             : `<pre>${escapeHtml(bodyContent)}</pre>`;
 
         document.getElementById('emailModal').style.display = 'flex';
@@ -378,6 +426,51 @@ async function openEmail(emailId) {
         console.error('Error opening email:', error);
         showNotification('Error loading email', 'error');
     }
+}
+
+async function fetchMessageMailGw(emailId) {
+    if (!authToken) return null;
+
+    const response = await fetch(`${API_BASE}/messages/${emailId}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const email = await response.json();
+    const htmlBody = Array.isArray(email.html) ? email.html.join('') : email.html;
+
+    return {
+        subject: email.subject,
+        from: (email.from && email.from.address) || 'unknown sender',
+        date: email.createdAt,
+        html: htmlBody,
+        text: email.text
+    };
+}
+
+async function fetchMessageGuerrilla(emailId) {
+    if (!sidToken) return null;
+
+    const response = await fetch(
+        `${FALLBACK_API_BASE}?f=fetch_email&email_id=${encodeURIComponent(emailId)}&sid_token=${encodeURIComponent(sidToken)}`
+    );
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const email = await response.json();
+
+    return {
+        subject: email.mail_subject,
+        from: email.mail_from || 'unknown sender',
+        date: email.mail_timestamp ? email.mail_timestamp * 1000 : Date.now(),
+        html: email.mail_body,
+        text: null
+    };
 }
 
 function closeModal() {
