@@ -417,9 +417,14 @@ async function openEmail(emailId) {
 
         // Display email body (prefer HTML, fallback to text)
         const bodyContent = email.html || email.text || 'No content';
-        document.getElementById('modalBody').innerHTML = email.html
+        const modalBody = document.getElementById('modalBody');
+        modalBody.innerHTML = email.html
             ? sanitizeHtml(email.html)
             : `<pre>${escapeHtml(bodyContent)}</pre>`;
+
+        // Shrink the font for long messages so they're easier to scan
+        const LONG_MESSAGE_THRESHOLD = 1200;
+        modalBody.classList.toggle('email-body--long', bodyContent.length > LONG_MESSAGE_THRESHOLD);
 
         document.getElementById('emailModal').style.display = 'flex';
     } catch (error) {

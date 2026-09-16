@@ -733,6 +733,21 @@ header h1 {
     overflow-y: auto;
     flex: 1;
     background-color: var(--card-bg);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) #000;
+}
+
+.modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: #000;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    box-shadow: 0 0 6px rgba(0, 255, 65, 0.6);
 }
 
 .email-meta {
@@ -758,6 +773,11 @@ header h1 {
     line-height: 1.8;
     color: var(--text-light);
     font-size: 0.95rem;
+}
+
+.email-body--long {
+    font-size: 0.8rem;
+    line-height: 1.6;
 }
 
 .email-body pre {
