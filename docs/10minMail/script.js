@@ -1,5 +1,7 @@
 // Configuration
-const API_BASE = 'https://api.mail.gw';
+// mail.gw and mail.tm are the same underlying service (identical API), so mail.tm
+// works as a drop-in fallback when mail.gw is down (or vice versa).
+const PROVIDERS = ['https://api.mail.gw', 'https://api.mail.tm'];
 const BOOT_LINES = [
     '> booting secure_mail_protocol...',
     '> establishing anonymous connection...',
@@ -10,6 +12,7 @@ let currentEmail = '';
 let currentDomain = '';
 let currentPassword = '';
 let authToken = '';
+let API_BASE = PROVIDERS[0];
 let timerInterval = null;
 let expirationTime = null;
 let checkEmailsInterval = null;
@@ -112,13 +115,40 @@ function setupEventListeners() {
     });
 }
 
-// Generate random email
+// Generate random email. Tries each provider in PROVIDERS in order, falling
+// back to the next one if the current one is down (e.g. mail.gw returning
+// 502s falls back to mail.tm, which exposes the identical API).
 async function generateNewEmail() {
     authToken = '';
 
+    for (const base of PROVIDERS) {
+        if (await tryGenerateEmail(base)) {
+            if (base !== PROVIDERS[0]) {
+                console.warn(`${PROVIDERS[0]} unavailable, fell back to ${base}`);
+            }
+            API_BASE = base;
+            document.getElementById('emailAddress').value = currentEmail;
+            showNotification('New email address generated!', 'success');
+            resetInboxUi();
+            return;
+        }
+    }
+
+    console.error('Error generating email: all providers unavailable');
+    showNotification('Error generating email. Check console for details.', 'error');
+
+    // Last resort: show a placeholder address (inbox checks are skipped without a token)
+    const username = generateRandomString(10);
+    currentEmail = `${username}@unavailable.invalid`;
+    document.getElementById('emailAddress').value = currentEmail;
+}
+
+// Attempts the mail.gw/mail.tm-style signup flow against the given API base.
+// Returns true on success, false if this provider should be skipped.
+async function tryGenerateEmail(base) {
     try {
         // Get available domains
-        const domainsResponse = await fetch(`${API_BASE}/domains`);
+        const domainsResponse = await fetch(`${base}/domains`);
 
         if (!domainsResponse.ok) {
             throw new Error(`HTTP error! status: ${domainsResponse.status}`);
@@ -139,7 +169,7 @@ async function generateNewEmail() {
         currentPassword = generateRandomString(20);
 
         // Register the mailbox
-        const accountResponse = await fetch(`${API_BASE}/accounts`, {
+        const accountResponse = await fetch(`${base}/accounts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address: currentEmail, password: currentPassword })
@@ -150,7 +180,7 @@ async function generateNewEmail() {
         }
 
         // Log in to get an access token for reading the inbox
-        const tokenResponse = await fetch(`${API_BASE}/token`, {
+        const tokenResponse = await fetch(`${base}/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address: currentEmail, password: currentPassword })
@@ -163,33 +193,28 @@ async function generateNewEmail() {
         const tokenData = await tokenResponse.json();
         authToken = tokenData.token;
 
-        document.getElementById('emailAddress').value = currentEmail;
-
-        showNotification('New email address generated!', 'success');
-
-        // Reset inbox tracking for the new mailbox
-        seenEmailIds = new Set();
-        readEmailIds = new Set();
-
-        // Clear inbox
-        document.getElementById('emailList').innerHTML = `
-            <div class="empty-inbox">
-                <svg width="64" height="64" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2zm13 2.383-4.758 2.855L15 11.114v-5.73zm-.034 6.878L9.271 8.82 8 9.583 6.728 8.82l-5.694 3.44A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.739zM1 11.114l4.758-2.876L1 5.383v5.73z"/>
-                </svg>
-                <p>No emails yet</p>
-                <small>Emails will appear here when received</small>
-            </div>
-        `;
+        return true;
     } catch (error) {
-        console.error('Error generating email:', error);
-        showNotification('Error generating email. Check console for details.', 'error');
-
-        // Fallback: show a placeholder address (inbox checks are skipped without a token)
-        const username = generateRandomString(10);
-        currentEmail = `${username}@unavailable.invalid`;
-        document.getElementById('emailAddress').value = currentEmail;
+        console.error(`${base} error generating email:`, error);
+        return false;
     }
+}
+
+function resetInboxUi() {
+    // Reset inbox tracking for the new mailbox
+    seenEmailIds = new Set();
+    readEmailIds = new Set();
+
+    // Clear inbox
+    document.getElementById('emailList').innerHTML = `
+        <div class="empty-inbox">
+            <svg width="64" height="64" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2zm13 2.383-4.758 2.855L15 11.114v-5.73zm-.034 6.878L9.271 8.82 8 9.583 6.728 8.82l-5.694 3.44A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.739zM1 11.114l4.758-2.876L1 5.383v5.73z"/>
+            </svg>
+            <p>No emails yet</p>
+            <small>Emails will appear here when received</small>
+        </div>
+    `;
 }
 
 function generateRandomString(length) {
